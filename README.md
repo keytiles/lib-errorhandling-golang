@@ -1,4 +1,4 @@
-# lib-advancederrors-golang
+# lib-errorhandling-golang
 
 Brings lean but data rich errors into the game. By using this unified error concept you can cut lots of (typically unnecessary and not much useful) complexity
 especially in error-mapping often happens between different layers of the application as error is bubbling upwards.
