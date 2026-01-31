@@ -1,0 +1,26 @@
+# binary
+log-service
+
+# coverage
+coverage.*
+coverage.html
+test.http
+
+# build  doc files
+build
+public
+
+.vscode/*
+*.code-workspace
+# Local History for Visual Studio Code
+.history/
+# User-specific stuff
+.idea/*
+
+# we do not commit any logs
+*.log
+# data folder excluded
+data
+
+# we do not commit main.go in this lib
+main.go

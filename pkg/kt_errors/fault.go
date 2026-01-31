@@ -1,0 +1,322 @@
+package kt_errors
+
+import (
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
+
+	"github.com/keytiles/lib-utils-golang/pkg/kt_utils"
+)
+
+type FaultKind = string
+
+const (
+	// The most generic type without telling too much about the kind of the error - something bad has happened runtime.
+	RuntimeFault FaultKind = "runtime"
+	// Use this type if your code find itself in an unexpected state.
+	// See the predefined `ILLEGALSTATE_ERRCODE_*` constants you can use as error codes to fine grain it further.
+	IllegalStateFault FaultKind = "illegal_state"
+	// Use this type if something is not implemented.
+	NotImplementedFault FaultKind = "not_implemented"
+	// You received an input/resource/data but that is not fully valid.
+	// See the predefined `VALIDATION_ERRCODE_*` constants you can use as error codes to fine grain it further.
+	ValidationFault FaultKind = "validation"
+	// You (or user) assumed a certain state but it seems your assumption does not stand...
+	// See the predefined `CONSTRAINTVIOLATION_ERRCODE_*` constants you can use as error codes to fine grain it further.
+	ConstraintViolationFault FaultKind = "constraint_violation"
+	// The resource which expected to be there is actually not. You can also model this with `ConstraintViolationError`
+	// combined with `CONSTRAINTVIOLATION_ERRCODE_DOES_NOT_EXIST` error code thats kinda equivalent. But using this might
+	// be simpler / more straightforward and this is pretty common problem often.
+	ResourceNotFoundFault FaultKind = "resource_not_found"
+	// Use this if there was a problem with authentication data.
+	// See the predefined `AUTHENTICATION_ERRCODE_*` constants you can use as error codes to fine grain it further.
+	AuthenticationFault FaultKind = "authentication"
+	// The actor simply does not have permission or we could not determine if he/she/it has.
+	// See the predefined `AUTHORIZATION_ERRCODE_*` constants you can use as error codes to fine grain it further.
+	AuthorizationFault FaultKind = "authorization"
+)
+
+const (
+	// This is pretty generic - any case something internally failed we want to mark it like that
+	ERRCODE_INTERNAL_ERROR = "internal"
+
+	// The config of the service is somehow wrong and this is causing a bad state
+	ILLEGALSTATE_ERRCODE_CONFIG_ERROR = "config_error"
+	// A dependency is permanently missing
+	ILLEGALSTATE_ERRCODE_DEPENDENCY_MISSING = "missing_dependency"
+	// Can be a temporary problem when e.g. we rely on an external system but somehow we can not reach it right now
+	ILLEGALSTATE_ERRCODE_DEPENDENCY_UNAVAILABLE = "unavailable_dependency"
+	// What we expected did not happen / we got something else
+	ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED = "expectation_failed"
+	// Something timed out - job is not done, state is not good
+	ILLEGALSTATE_ERRCODE_TIMED_OUT = "timed_out"
+	// Something has reached its limits - no more is possible
+	ILLEGALSTATE_ERRCODE_EXHAUSTED = "exhausted"
+
+	// Use this error code if you expected something else as a type
+	VALIDATION_ERRCODE_WRONG_DATATYPE = "wrong_datatype"
+	// Use this error code if you expected a sepcific format for something but you received something else instead
+	VALIDATION_ERRCODE_WRONG_FORMAT = "wrong_format"
+	// Use this error code if you expected a mandatory parameter but was not provided
+	VALIDATION_ERRCODE_MISSING_MANDATORY = "mandatoy_info_missing"
+	// Use this error code if somewhere you expected to get nothing (e.g. a field should be None) but you got something
+	VALIDATION_ERRCODE_SHOULD_NOT_BE_PROVIDED = "should_not_be_provided"
+	// Use this error code if however data was provided it is not valid - content wise
+	VALIDATION_ERRCODE_INVALID_VALUE = "invalid_value"
+	// Use this error code if provided data is trying to change a value which actually is read-only
+	VALIDATION_ERRCODE_READONLY_VALUE_CHANGED = "readonly_value_changed"
+
+	// Use this error code if you have a resource conflicting PrimaryKey or ID
+	CONSTRAINTVIOLATION_ERRCODE_ID_ALREADY_TAKEN = "id_already_taken"
+	// A bit more generic representation of the fact: something already exists
+	CONSTRAINTVIOLATION_ERRCODE_ALREADY_EXIST = "already_exists"
+	// The object / resource / whatever we were expected being there is actually not there
+	CONSTRAINTVIOLATION_ERRCODE_DOES_NOT_EXIST = "not_exists"
+	// A generic description of the fact that the preconditions you were expected is not met
+	CONSTRAINTVIOLATION_ERRCODE_PRECONDITION_FAILED = "precondition_failed"
+	// Use this error code if you have a resource conflicting assumed vs real versions
+	CONSTRAINTVIOLATION_ERRCODE_VERSION_CONFLICT = "resource_version_conflict"
+
+	// Use this if you expected to have an authentication at certain point but it is not there
+	AUTHENTICATION_ERRCODE_MISSING = "auth_data_missing"
+	// Use this if however auth info was there but it is using a method which you do not support
+	AUTHENTICATION_ERRCODE_NOT_SUPPORTED = "auth_method_not_supported"
+	// Use this if however auth info was there auth process was not successful
+	AUTHENTICATION_ERRCODE_FAILED = "authentication_failed"
+
+	// The actor can not do this.
+	AUTHORIZATION_NO_PERMISSION = "no_permission"
+	// Use this if the authorization process was not successful for whatever reason. So this does not mean
+	// the actor has no permission, it just failed this time.
+	AUTHORIZATION_ERRCODE_FAILED = "authorization_failed"
+)
+
+const (
+	// Audience role - user - for audience facing message templates.
+	MSGAUDIENCE_USER = "user"
+)
+
+// Our unified, data rich Keytiles-internal error which is able to carry many and all necessarry information and let it bubble up from literally any layers:
+// even from libraries or simply service internal layers.
+//
+// The most important concept:
+// An error **can be classified as "public"** - yes or no.
+// Public errors are suitable to leave the boundary and even show it to users - as they are phrased the way a) message is clear b) not leaking out internal
+// implementation details for sure.
+// If an error is non-Public then it is considered unsafe in the above sense and can be converted into a public version using method
+// `NewPublicFaultFromAnyError()` - see method comments to get a better picture what is happening then!
+//
+// An error like this is data rich - as we already wrote. It can
+//   - Carry error codes - for machine readability (strings - see predefined `*_ERRCODE_*` codes, but you can also define your own)
+//   - The error is typed - see `ErrorType`s! This also helps a lot in machine readability as well as properly convert then e.g. to Http/gRPC status codes!
+//   - Carry the cause - the error which caused this error
+//   - Carry labels (key-value pairs) associated with this error
+//   - The message is not just a dumb string but can be a template! It can contain variable placeholders
+//     (Python style - "My error message with {var1} and {var2}") which can be resolved from labels!
+//   - And apart from the default message it can also carry different message templates meant for different audiences
+//
+// To construct an error with comfort we use builder pattern. You can use `NewFaultBuilder()` or `NewPublicFaultBuilder()` to quickly
+// create a builder for a non-public or public error and fine tune the data it will carry.
+//
+// IMPORTANT NOTE - for logging or printing into string:
+// Use `VarPrinter` if you want the error printed using its `String()` method! Otherwise the `Error()` method will be used by Go by default as this
+// is `error` type.
+type Fault interface {
+	error
+	fmt.Stringer
+
+	// Returns the type of this error.
+	GetKind() FaultKind
+	// Returns the message template unresolved (so with possible variable placeholders in it as is)
+	GetMessageTemplate() string
+	// Returns the message - with resolved variable placeholders from labels.
+	GetMessage() string
+	// Returns the message template meant for the given audience unresolved (so with possible variable placeholders in it as is).
+	// If there is no template for the requested audience, empty string is returned.
+	GetMessageTemplateForAudience(forAudience string) string
+	// Returns the message meant for the given audience - with resolved variable placeholders from labels.
+	// If there is no template for the requested audience, empty string is returned.
+	GetMessageForAudience(forAudience string) string
+	// Returns map view of message templates by audiences.
+	GetMessageTemplatesByAudience() map[string]string
+	// Tells if this error is suitable to leave the private boundary or not (public = no implementation details leaking for sure).
+	IsPublic() bool
+	// We extend the error with the possibility of check if error is retryable.
+	IsRetryable() bool
+	// Returns all associated error codes.
+	GetErrorCodes() []string
+	// Tells if this error is carrying any of the listed error codes or not.
+	HasErrorCode(codes ...string) bool
+	// Returns the Cause of this error - which is another (any) error.
+	GetCause() error
+	// Errors can carry a set of labels.
+	GetLabels() map[string]any
+	// Error supports tracking the call chain. You can optionally use this (or not, up to you). But if you do, this method returns the content of this.
+	// The `GetSource()` method returns where the error was born - you can set this with the builder `WithSource()` method. Then as the error bubbles
+	// up, each hop can use the `AddCallerToCallStack()` method. This is how call stack is building up - what you can retrieve with this method.
+	// The last element is the source - returned by `GetSource()`. Then the previous element is who called the source. And so on. The first element
+	// is the point who started the whole call chain.
+	GetCallStack() []string
+	// Tells you where the error is originated from. We do it the easiest way: we can put this into a string :-) That's it.
+	// See the error builder `WithSource()` method! If you invoke `GetCallStack()` method, this will be actually the deepest element on the stack.
+	GetSource() string
+	// You can add a caller to the call stack. You can do this when you capture an error like this because it is returned to you.
+	// As you can see, if you want you can pass in multiple string elements. If you do so, they will be automatically concatenated
+	// using "." separator. Why is it useful? Because you can do something like this: `AddCallerToCallStack("mypackage", "mymethod")` e.g.
+	AddCallerToCallStack(caller ...string)
+}
+
+func newInitializedFault(errType FaultKind) defaultFault {
+	return defaultFault{
+		kind:                       errType,
+		labels:                     make(map[string]any, 0),
+		messageTemplatesByAudience: make(map[string]string, 0),
+		callStack:                  make([]string, 0, 5),
+	}
+}
+
+type defaultFault struct {
+	kind                       FaultKind
+	messageTemplate            string
+	messageTemplatesByAudience map[string]string
+	isPublic                   bool
+	isRetryable                bool
+	errorCodes                 []string
+	labels                     map[string]any
+	cause                      error
+	callStack                  []string
+}
+
+func (err *defaultFault) GetKind() FaultKind {
+	return err.kind
+}
+
+func (err *defaultFault) GetMessageTemplate() string {
+	return err.messageTemplate
+}
+
+func (err *defaultFault) GetMessage() string {
+	return kt_utils.StringSimpleResolve(err.messageTemplate, err.labels)
+}
+
+func (err *defaultFault) GetMessageTemplateForAudience(forAudience string) string {
+	return err.messageTemplatesByAudience[forAudience]
+}
+
+func (err *defaultFault) GetMessageForAudience(forAudience string) string {
+	return kt_utils.StringSimpleResolve(err.GetMessageTemplateForAudience(forAudience), err.labels)
+}
+
+func (err *defaultFault) GetMessageTemplatesByAudience() map[string]string {
+	// we return a copy only
+	ret := make(map[string]string, len(err.messageTemplatesByAudience))
+	maps.Copy(ret, err.messageTemplatesByAudience)
+	return ret
+}
+
+func (err *defaultFault) IsPublic() bool {
+	return err.isPublic
+}
+
+func (err *defaultFault) GetErrorCodes() []string {
+	// we return a copy
+	ret := make([]string, len(err.errorCodes))
+	copy(ret, err.errorCodes)
+	return ret
+}
+
+func (err *defaultFault) HasErrorCode(codes ...string) bool {
+	for _, code := range codes {
+		if slices.Contains(err.errorCodes, code) {
+			return true
+		}
+	}
+	return false
+}
+
+func (err *defaultFault) GetCause() error {
+	return err.cause
+}
+
+func (err *defaultFault) GetSource() string {
+	if len(err.callStack) > 0 {
+		return err.callStack[0]
+	}
+	return ""
+}
+
+func (err *defaultFault) GetCallStack() []string {
+	// we return a copy
+	ret := make([]string, len(err.callStack))
+	copy(ret, err.callStack)
+	slices.Reverse(ret)
+	return ret
+}
+
+func (err *defaultFault) AddCallerToCallStack(caller ...string) {
+	err.callStack = append(err.callStack, strings.Join(caller, "."))
+}
+
+func (err *defaultFault) IsRetryable() bool {
+	return err.isRetryable
+}
+
+func (err *defaultFault) GetLabels() map[string]any {
+	// we return a copy only
+	ret := make(map[string]any, len(err.labels))
+	maps.Copy(ret, err.labels)
+	return ret
+}
+
+// The implementation of Error iface - this considers if the error is public or not.
+// If not public then just prints the resolved message and safe info (to avoid leaking internal info) - otherwise also reveals labels
+func (err *defaultFault) Error() string {
+	codesStr := "[]"
+	if len(err.errorCodes) > 0 {
+		codesStr = fmt.Sprintf("['%s']", strings.Join(err.errorCodes, "','"))
+	}
+	if err.isPublic {
+		return fmt.Sprintf("%s: %s (retryable: %t, errorCodes: %s, labels: %s)",
+			err.kind, err.GetMessage(), err.isRetryable, codesStr, kt_utils.PrintVarS(err.labels, false))
+	} else {
+		return fmt.Sprintf("%s: %s (retryable: %t, errorCodes: %s)",
+			err.kind, err.GetMessage(), err.isRetryable, codesStr)
+	}
+}
+
+// The fmt.Stringer implementation which is producing complete string representation of the error. Useful for logging purposes.
+func (err *defaultFault) String() string {
+	causeStr := "nil"
+	if err.cause != nil {
+		isKtErr, ktErr := IsFault(err.cause)
+		if isKtErr {
+			// we use the to string mechanism
+			causeStr = fmt.Sprintf("{%s}", ktErr.String())
+		} else {
+			// we print it normal way
+			causeStr = fmt.Sprintf("'%s'", err.cause)
+		}
+
+	}
+	codesStr := "[]"
+	if len(err.errorCodes) > 0 {
+		codesStr = fmt.Sprintf("['%s']", strings.Join(err.errorCodes, "','"))
+	}
+	callStackStr := "[]"
+	if len(err.callStack) > 0 {
+		callStackStr = fmt.Sprintf("['%s']", strings.Join(err.GetCallStack(), "','"))
+	}
+	return fmt.Sprintf(
+		"Fault{type: '%s', msgTemplate: '%s', retryable: %t, public: %t, codes: %s, callStack: %s, cause: %s, audienceMsgs: %s, labels: %s}",
+		err.kind,
+		err.messageTemplate,
+		err.isRetryable,
+		err.isPublic,
+		codesStr,
+		callStackStr,
+		causeStr,
+		kt_utils.PrintVarS(err.messageTemplatesByAudience, false),
+		kt_utils.PrintVarS(err.labels, false),
+	)
+}
