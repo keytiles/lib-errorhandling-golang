@@ -119,9 +119,13 @@ const (
 // To construct an error with comfort we use builder pattern. You can use `NewFaultBuilder()` or `NewPublicFaultBuilder()` to quickly
 // create a builder for a non-public or public error and fine tune the data it will carry.
 //
+// Please note: this object is semi-immutable! Many things you can NOT change but some info you can extend, add to it (mutate) as error bubbles
+// upwards the call chain. See `AddXXX()` methods!
+//
 // IMPORTANT NOTE - for logging or printing into string:
 // Use `VarPrinter` if you want the error printed using its `String()` method! Otherwise the `Error()` method will be used by Go by default as this
-// is `error` type.
+// is `error` type. The `Error()` is just returning / printing the message and optionally error codes, labels. Human readable form. Full info printed
+// only by `String()` method which is probably what you want to log.
 type Fault interface {
 	error
 	fmt.Stringer
@@ -161,10 +165,40 @@ type Fault interface {
 	// Tells you where the error is originated from. We do it the easiest way: we can put this into a string :-) That's it.
 	// See the error builder `WithSource()` method! If you invoke `GetCallStack()` method, this will be actually the deepest element on the stack.
 	GetSource() string
+
 	// You can add a caller to the call stack. You can do this when you capture an error like this because it is returned to you.
 	// As you can see, if you want you can pass in multiple string elements. If you do so, they will be automatically concatenated
 	// using "." separator. Why is it useful? Because you can do something like this: `AddCallerToCallStack("mypackage", "mymethod")` e.g.
 	AddCallerToCallStack(caller ...string)
+	// As the error bubbles upwards in higher layers it is often a requirement you want to add a bit more context to it. In classic error handling this
+	// often ends in building mapping-functions and you raise a completely new error attaching the original one as Cause or similar tacticts. However
+	// this leads to lots of boilerplate code and often results in mistakes especially if you have multiple layers in your code and each one is doing the same.
+	//
+	// So instead enforcing this strategy `Fault` offers a simpler way. You do not need to create a brand new error just to add your context info but you
+	// can simply extend it in place and let the original prublom bubble upwards with all the details it already has! Basically, you simply extend the
+	// information with those details you know in the higher level layer only.
+	//
+	// Using this method you can do this. You can prepend (prefix) to the messageTemplate of the error with a piece of string.
+	// It is really a prefix - imagine a simple concatenation! So you need to include separators, white-spaces etc at the end of your prefix str!
+	// If you send in empty str nothing will happen.
+	AddContextToMessage(msgTemplatePrefix string)
+	// Same as `AddContextToMessage()` (read its comment!) but with this one you can extend the audience facing messages with more context. If the audience you
+	// refer to with `forAudience` does not exist it will be created. And maybe good to know that the `msgTemplatePrefix` value in this case will be trimmed on
+	// the right side (not just whitespaces but also ':' and '-' characters) so no need to worry about strange white spaces.
+	// If you send in empty str in any parameters nothing will happen.
+	AddContextToAudienceMessage(forAudience string, msgTemplatePrefix string)
+	// Please read the comment of `AddContextToMessage()` method! You get a better understanding on the motivation and problem then.
+	// With this method - as the error bubbles upwards - highler level layers might want to extend it with their custom error codes. You can do it in one go by
+	// adding multiple at once.
+	AddErrorCodes(c ...string)
+	// Please read the comment of `AddContextToMessage()` method! You get a better understanding on the motivation and problem then.
+	// As the error bubbles upwards higher level layers might want to extend it with more labels - especially since we have `AddContextToMessage()` and
+	// `AddContextToAudienceMessage()` which can introduce new {var}-s into the messages.
+	AddLabel(key string, value any)
+	// Please read the comment of `AddContextToMessage()` method! You get a better understanding on the motivation and problem then.
+	// As the error bubbles upwards higher level layers might want to extend it with more labels - especially since we have `AddContextToMessage()` and
+	// `AddContextToAudienceMessage()` which can introduce new {var}-s into the messages.
+	AddLabels(labels map[string]any)
 }
 
 func newInitializedFault(errType FaultKind) defaultFault {
@@ -267,6 +301,51 @@ func (err *defaultFault) GetLabels() map[string]any {
 	ret := make(map[string]any, len(err.labels))
 	maps.Copy(ret, err.labels)
 	return ret
+}
+
+func (err *defaultFault) AddContextToMessage(contextMsgTemplate string) {
+	if contextMsgTemplate != "" {
+		// we prepend to the message
+		err.messageTemplate = contextMsgTemplate + err.messageTemplate
+	}
+}
+
+func (err *defaultFault) AddContextToAudienceMessage(forAudience string, contextMsgTemplate string) {
+	if contextMsgTemplate != "" && forAudience != "" {
+		_trimmed := ""
+		msg, found := err.messageTemplatesByAudience[forAudience]
+		if found {
+			// we prepend to the message
+			err.messageTemplatesByAudience[forAudience] = contextMsgTemplate + msg
+		}
+		if !found {
+			// will become the message but trimmed way
+			if _trimmed == "" {
+				// we just do it once
+				_trimmed = strings.TrimRight(contextMsgTemplate, " \t\r\n-:")
+			}
+			err.messageTemplatesByAudience[forAudience] = _trimmed
+		}
+
+	}
+}
+
+func (err *defaultFault) AddErrorCodes(c ...string) {
+	for _, errCode := range c {
+		if errCode != "" && !slices.Contains(err.errorCodes, errCode) {
+			err.errorCodes = append(err.errorCodes, errCode)
+		}
+	}
+}
+
+func (err *defaultFault) AddLabel(key string, value any) {
+	if key != "" {
+		err.labels[key] = value
+	}
+}
+
+func (err *defaultFault) AddLabels(labels map[string]any) {
+	maps.Copy(err.labels, labels)
 }
 
 // The implementation of Error iface - this considers if the error is public or not.
