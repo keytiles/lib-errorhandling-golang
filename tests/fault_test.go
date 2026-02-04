@@ -360,3 +360,202 @@ func TestAddingMoreContextToFault(t *testing.T) {
 	assert.Equal(t, 3, len(fault.GetErrorCodes()))
 	assert.True(t, fault.HasErrorCode("amended_err_code"))
 }
+
+func TestNonPublicFaultMaturalJSONSerialization(t *testing.T) {
+
+	// ---- GIVEN
+
+	// we create a Fault - non-public but this does not matter now much
+	fault := kt_errors.NewFaultBuilder(kt_errors.IllegalStateFault).
+		WithIsRetryable(true).
+		WithMessageTemplate("message with var={var1} and unknown {unknown_var}").
+		WithMessageTemplateForAudience("operator", "message for operators").
+		WithErrorCodes(kt_errors.ILLEGALSTATE_ERRCODE_CONFIG_ERROR).
+		WithLabel("var1", "value1").
+		WithSource("mymodule", "myfunction").
+		Build()
+
+	// ==================
+	// Scenario 1
+	// ==================
+	// Non-public Fault should basically return empty things by default
+
+	// ---- WHEN
+	json, err := fault.ToNaturalJSON("")
+	// ---- THEN
+	assert.NoError(t, err)
+	// no details should be exposed
+	jsonStr := string(json)
+	assert.Equal(
+		t,
+		`{"kind":"runtime","message":"","isRetryable":true,"errorCodes":[],"labels":{}}`,
+		jsonStr,
+	)
+
+	// ==================
+	// Scenario 2
+	// ==================
+	// But if we explicitly tell it is OK then it should return the details normally
+
+	// ---- WHEN
+	json, err = fault.ToNaturalJSON("", kt_errors.AllowNonPublicSerialization)
+	// ---- THEN
+	assert.NoError(t, err)
+	// we should see all details
+	jsonStr = string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"message with var={var1} and unknown {unknown_var}","isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
+		jsonStr,
+	)
+
+	// ==================
+	// Scenario 3
+	// ==================
+	// And error message resolving also works
+
+	// ---- WHEN
+	json, err = fault.ToNaturalJSON("", kt_errors.AllowNonPublicSerialization, kt_errors.ResolveMessages)
+	// ---- THEN
+	assert.NoError(t, err)
+	// we should see all details
+	jsonStr = string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"message with var=value1 and unknown {unknown_var}","isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
+		jsonStr,
+	)
+}
+
+func TestPublicFaultNaturalJSONSerialization(t *testing.T) {
+
+	// ---- GIVEN
+
+	// we create a Fault - non-public but this does not matter now much
+	fault := kt_errors.NewPublicFaultBuilder(kt_errors.IllegalStateFault).
+		WithIsRetryable(true).
+		WithMessageTemplate("message with var={var1} and unknown {unknown_var}").
+		WithMessageTemplateForAudience("operator", "message for operators var={var1}").
+		WithErrorCodes(kt_errors.ILLEGALSTATE_ERRCODE_CONFIG_ERROR).
+		WithLabel("var1", "value1").
+		WithSource("mymodule", "myfunction").
+		Build()
+
+	// ==================
+	// Scenario 1
+	// ==================
+	// We should see all details - we request the default message
+
+	// ---- WHEN
+	json, err := fault.ToNaturalJSON("")
+	// ---- THEN
+	assert.NoError(t, err)
+	// we should see all details
+	jsonStr := string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"message with var={var1} and unknown {unknown_var}","isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
+		jsonStr,
+	)
+
+	// ==================
+	// Scenario 2
+	// ==================
+	// And error message resolving also works
+
+	// ---- WHEN
+	json, err = fault.ToNaturalJSON("", kt_errors.ResolveMessages)
+	// ---- THEN
+	assert.NoError(t, err)
+	// we should see all details
+	jsonStr = string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"message with var=value1 and unknown {unknown_var}","isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
+		jsonStr,
+	)
+
+	// ==================
+	// Scenario 3
+	// ==================
+	// If we request "operator" message that is returned
+
+	// ---- WHEN
+	json, err = fault.ToNaturalJSON("operator", kt_errors.ResolveMessages)
+	// ---- THEN
+	assert.NoError(t, err)
+	// we should see all details
+	jsonStr = string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"message for operators var=value1","isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
+		jsonStr,
+	)
+
+	// ==================
+	// Scenario 4
+	// ==================
+	// But if we request not existing audience empty message is returned
+
+	// ---- WHEN
+	json, err = fault.ToNaturalJSON("unknown-audience", kt_errors.ResolveMessages)
+	// ---- THEN
+	assert.NoError(t, err)
+	// we should see all details
+	jsonStr = string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"","isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
+		jsonStr,
+	)
+
+}
+
+func TestPublicFaultFullJSONSerialization(t *testing.T) {
+
+	// ---- GIVEN
+
+	// we create a Fault - non-public but this does not matter now much
+	fault := kt_errors.NewPublicFaultBuilder(kt_errors.IllegalStateFault).
+		WithIsRetryable(true).
+		WithMessageTemplate("message with var={var1} and unknown {unknown_var}").
+		WithMessageTemplateForAudience("operator", "message for operators var={var1}").
+		WithErrorCodes(kt_errors.ILLEGALSTATE_ERRCODE_CONFIG_ERROR).
+		WithLabel("var1", "value1").
+		WithSource("mymodule", "myfunction").
+		Build()
+
+	// ==================
+	// Scenario 1
+	// ==================
+	// We should see all details
+
+	// ---- WHEN
+	json, err := fault.ToFullJSON()
+	// ---- THEN
+	assert.NoError(t, err)
+	// we should see all details
+	jsonStr := string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"message with var={var1} and unknown {unknown_var}","messagesByAudience":{"operator":"message for operators var={var1}"},"isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
+		jsonStr,
+	)
+
+	// ==================
+	// Scenario 2
+	// ==================
+	// We should see all details and resolving also works
+
+	// ---- WHEN
+	json, err = fault.ToFullJSON(kt_errors.ResolveMessages)
+	// ---- THEN
+	assert.NoError(t, err)
+	// we should see all details
+	jsonStr = string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"message with var=value1 and unknown {unknown_var}","messagesByAudience":{"operator":"message for operators var=value1"},"isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
+		jsonStr,
+	)
+}

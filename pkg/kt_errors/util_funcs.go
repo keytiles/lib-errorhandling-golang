@@ -5,6 +5,7 @@ import (
 
 	"github.com/keytiles/lib-logging-golang/v2/pkg/kt_logging"
 	"github.com/keytiles/lib-utils-golang/pkg/kt_utils"
+	"google.golang.org/grpc/codes"
 )
 
 var (
@@ -123,6 +124,116 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 	}
 
 	return builder.Build()
+}
+
+// Returns the gRPC status code you should use in the error response for the given `Fault`.
+//
+// IMPORTANT! In case the `Fault` is not public then it is always INTERNAL error - otherwise it is determined from the attributes and the kind of the Fault.
+//
+// Note: there is an alias for this method as `fault.GetGrpcStatusCode()` - if you prefer that style more.
+func GetGrpcStatusCodeForFault(fault Fault) (grpcStatus codes.Code) {
+	grpcStatus = codes.Internal
+	if fault == nil || !fault.IsPublic() {
+		return
+	}
+
+	// Now lets be error type specific from this point
+	switch fault.GetKind() {
+	case AuthenticationFault:
+		grpcStatus = codes.Unauthenticated
+	case AuthorizationFault:
+		grpcStatus = codes.PermissionDenied
+	case ResourceNotFoundFault:
+		grpcStatus = codes.NotFound
+	case ConstraintViolationFault:
+		grpcStatus = codes.FailedPrecondition
+		if fault.HasErrorCode(CONSTRAINTVIOLATION_ERRCODE_ID_ALREADY_TAKEN) ||
+			fault.HasErrorCode(CONSTRAINTVIOLATION_ERRCODE_ALREADY_EXIST) {
+			grpcStatus = codes.AlreadyExists
+		} else if fault.HasErrorCode(CONSTRAINTVIOLATION_ERRCODE_DOES_NOT_EXIST) {
+			grpcStatus = codes.NotFound
+		}
+	case ValidationFault:
+		grpcStatus = codes.InvalidArgument
+	case NotImplementedFault:
+		grpcStatus = codes.Unimplemented
+	case IllegalStateFault:
+		if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_DEPENDENCY_UNAVAILABLE) ||
+			fault.HasErrorCode(ILLEGALSTATE_ERRCODE_TIMED_OUT) {
+			grpcStatus = codes.Unavailable
+		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXHAUSTED) {
+			grpcStatus = codes.ResourceExhausted
+		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED) {
+			grpcStatus = codes.FailedPrecondition
+		}
+	}
+
+	return
+}
+
+// Returns the HTTP status code you should use in the error response for the given `Fault`.
+//
+// IMPORTANT! In case the `Fault` is not public then it is always 500 INTERNAL ERROR - otherwise it is determined from the attributes and the kind of the Fault.
+//
+// Note: there is an alias for this method as `fault.GetHttpStatusCode()` - if you prefer that style more.
+func GetHttpStatusCodeForFault(fault Fault) (httpStatus int) {
+	httpStatus = 500
+	if fault == nil || !fault.IsPublic() {
+		return
+	}
+
+	// Now lets be error type specific from this point
+	switch fault.GetKind() {
+	case AuthenticationFault:
+		// UNATHORIZED
+		httpStatus = 401
+	case AuthorizationFault:
+		// FORBIDDEN
+		httpStatus = 403
+	case ResourceNotFoundFault:
+		// NOT_FOUND
+		httpStatus = 404
+	case ConstraintViolationFault:
+		// PRECONDITION_FAILED
+		httpStatus = 412
+		if fault.HasErrorCode(CONSTRAINTVIOLATION_ERRCODE_ID_ALREADY_TAKEN) ||
+			fault.HasErrorCode(CONSTRAINTVIOLATION_ERRCODE_ALREADY_EXIST) {
+			// CONFLICT
+			httpStatus = 409
+		} else if fault.HasErrorCode(CONSTRAINTVIOLATION_ERRCODE_DOES_NOT_EXIST) {
+			// NOT_FOUND
+			httpStatus = 404
+		}
+	case ValidationFault:
+		// BAD REQUEST
+		httpStatus = 400
+	case NotImplementedFault:
+		// NOT IMPLEMENTED
+		httpStatus = 501
+	case IllegalStateFault:
+		if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_DEPENDENCY_UNAVAILABLE) || fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXHAUSTED) ||
+			fault.HasErrorCode(ILLEGALSTATE_ERRCODE_TIMED_OUT) {
+			// SERVICE_UNAVAILABLE
+			httpStatus = 503
+		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED) {
+			// PRECONDITION_FAILED
+			httpStatus = 412
+		}
+	}
+
+	return
+}
+
+// Alias over the Fault's member function `fault.ToNaturalJSON()` - see description there!
+// You can also use the member function if you prefer that style more in your code.
+func GetFaultAsNaturalJSON(fault Fault, forAudience string, options ...SerializationOption) ([]byte, error) {
+	return fault.ToNaturalJSON(forAudience, options...)
+}
+
+// Alias over the Fault's member function `fault.ToFullJSON()` - see description there!
+// You can also use the member function if you prefer that style more in your code.
+func GetFaultAsFullJSON(fault Fault, options ...SerializationOption) ([]byte, error) {
+	return fault.ToFullJSON(options...)
 }
 
 func getDefaultLogger() *kt_logging.Logger {

@@ -1,12 +1,14 @@
 package kt_errors
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
 	"strings"
 
 	"github.com/keytiles/lib-utils-golang/pkg/kt_utils"
+	"google.golang.org/grpc/codes"
 )
 
 type FaultKind = string
@@ -95,6 +97,19 @@ const (
 const (
 	// Audience role - user - for audience facing message templates.
 	MSGAUDIENCE_USER = "user"
+)
+
+// Basically true/false options to change the serialization behavior
+type SerializationOption int
+
+const (
+	// If set then the possible {var} variables are getting resolved from the labels in the messages before returned.
+	ResolveMessages SerializationOption = 1
+	// If set then the JSON is indented with line breaks and tabs so becomes more human readable
+	PrettyPrint = 2
+	// By default the serialization only happens if Fault is public - to prevent data leak non-public Faults simply returning blank form.
+	// But if you set this option explicitly then this defense mechanism gets disabled.
+	AllowNonPublicSerialization = 3
 )
 
 // Our unified, data rich Keytiles-internal error which is able to carry many and all necessarry information and let it bubble up from literally any layers:
@@ -199,124 +214,177 @@ type Fault interface {
 	// As the error bubbles upwards higher level layers might want to extend it with more labels - especially since we have `AddContextToMessage()` and
 	// `AddContextToAudienceMessage()` which can introduce new {var}-s into the messages.
 	AddLabels(labels map[string]any)
+
+	// Returns the HTTP status code you should use in the response if you fail from this Fault.
+	// Note: this is a wrapper around the utility function `GetHttpStatusCodeForFault()` - you can use that if you prefer that form instead.
+	// IMPORTANT! In case the `Fault` is not public then it is always 500 INTERNAL ERROR - otherwise it is determined from the attributes and the kind of the
+	// Fault.
+	GetHttpStatusCode() int
+	// Returns the gRPC status code you should use in the response if you fail from this Fault.
+	// Note: this is a wrapper around the utility function `GetGrpcStatusCodeForFault()` - you can use that if you prefer that form instead.
+	// IMPORTANT! In case the `Fault` is not public then it is always INTERNAL error - otherwise it is determined from the attributes and the kind of the Fault.
+	GetGrpcStatusCode() codes.Code
+
+	// Returns the natural (most human readable) JSON form of this Fault - can come handy if you build e.g. HTTP APIs and you need quickly return an error
+	// response. Check the available `SerializationOption`s you can use optionally!
+	// This method returns a JSON like:
+	//
+	//    {
+	//       "kind": "<the Kind>",
+	//       "message": "<the default MessageTemplate or given 'forAudience' template - raw or resolved>",
+	//       "isRetryable": true/false,
+	//       "errorCodes": ["the", "error", "codes"],
+	//       "labels": {
+	//           "key1": <value1>,
+	//           "key2": <value2>,
+	//           ...
+	//        }
+	//    }
+	//
+	// As you see really internal details like "cause" or "call stack" etc are absolutely not revealed.
+	//
+	// IMPORTANT! To prevent accidental data leak this serialization only renders public Faults! If the Fault is non-public you get back empty
+	// values only - unless you explicitly use `AllowNonPublicSerialization` option!
+	//
+	// Parameters:
+	// - `forAudience` - if you pass empty string you get back the default MessageTemplate - otherwise the specific audience message comes back
+	ToNaturalJSON(forAudience string, options ...SerializationOption) ([]byte, error)
+
+	// Just like `ToNaturalJSON()` this also returns a JSON representation but this one returns the "message" and "messagesByAudience"
+	// separately - revealing more internal structure.
+	//
+	// However really internal details like "cause" or "call stack" etc are absolutely not revealed even in this form.
+	//
+	// IMPORTANT! To prevent accidental data leak this serialization only renders public Faults! If the Fault is non-public you get back empty
+	// values only - unless you explicitly use `AllowNonPublicSerialization` option!
+	ToFullJSON(options ...SerializationOption) ([]byte, error)
 }
 
 func newInitializedFault(errType FaultKind) defaultFault {
 	return defaultFault{
-		kind:                       errType,
-		labels:                     make(map[string]any, 0),
-		messageTemplatesByAudience: make(map[string]string, 0),
-		callStack:                  make([]string, 0, 5),
+		Kind:                       errType,
+		Labels:                     make(map[string]any, 0),
+		MessageTemplatesByAudience: make(map[string]string, 0),
+		callStack:                  make([]string, 0, 4),
 	}
 }
 
+// This is used only for JSON / Yaml serialization
+type naturalFormFault struct {
+	Kind       FaultKind      `json:"kind" yaml:"kind"`
+	Message    string         `json:"message" yaml:"message"`
+	Retryable  bool           `json:"isRetryable" yaml:"isRetryable"`
+	ErrorCodes []string       `json:"errorCodes" yaml:"errorCodes"`
+	Labels     map[string]any `json:"labels" yaml:"labels"`
+}
+
 type defaultFault struct {
-	kind                       FaultKind
-	messageTemplate            string
-	messageTemplatesByAudience map[string]string
-	isPublic                   bool
-	isRetryable                bool
-	errorCodes                 []string
-	labels                     map[string]any
+	Kind                       FaultKind         `json:"kind" yaml:"kind"`
+	MessageTemplate            string            `json:"message" yaml:"message"`
+	MessageTemplatesByAudience map[string]string `json:"messagesByAudience" yaml:"messagesByAudience"`
+	Retryable                  bool              `json:"isRetryable" yaml:"isRetryable"`
+	ErrorCodes                 []string          `json:"errorCodes" yaml:"errorCodes"`
+	Labels                     map[string]any    `json:"labels" yaml:"labels"`
+	public                     bool
 	cause                      error
 	callStack                  []string
 }
 
-func (err *defaultFault) GetKind() FaultKind {
-	return err.kind
+func (fault *defaultFault) GetKind() FaultKind {
+	return fault.Kind
 }
 
-func (err *defaultFault) GetMessageTemplate() string {
-	return err.messageTemplate
+func (fault *defaultFault) GetMessageTemplate() string {
+	return fault.MessageTemplate
 }
 
-func (err *defaultFault) GetMessage() string {
-	return kt_utils.StringSimpleResolve(err.messageTemplate, err.labels)
+func (fault *defaultFault) GetMessage() string {
+	return kt_utils.StringSimpleResolve(fault.MessageTemplate, fault.Labels)
 }
 
-func (err *defaultFault) GetMessageTemplateForAudience(forAudience string) string {
-	return err.messageTemplatesByAudience[forAudience]
+func (fault *defaultFault) GetMessageTemplateForAudience(forAudience string) string {
+	return fault.MessageTemplatesByAudience[forAudience]
 }
 
-func (err *defaultFault) GetMessageForAudience(forAudience string) string {
-	return kt_utils.StringSimpleResolve(err.GetMessageTemplateForAudience(forAudience), err.labels)
+func (fault *defaultFault) GetMessageForAudience(forAudience string) string {
+	return kt_utils.StringSimpleResolve(fault.GetMessageTemplateForAudience(forAudience), fault.Labels)
 }
 
-func (err *defaultFault) GetMessageTemplatesByAudience() map[string]string {
+func (fault *defaultFault) GetMessageTemplatesByAudience() map[string]string {
 	// we return a copy only
-	ret := make(map[string]string, len(err.messageTemplatesByAudience))
-	maps.Copy(ret, err.messageTemplatesByAudience)
+	ret := make(map[string]string, len(fault.MessageTemplatesByAudience))
+	maps.Copy(ret, fault.MessageTemplatesByAudience)
 	return ret
 }
 
-func (err *defaultFault) IsPublic() bool {
-	return err.isPublic
+func (fault *defaultFault) IsPublic() bool {
+	return fault.public
 }
 
-func (err *defaultFault) GetErrorCodes() []string {
+func (fault *defaultFault) GetErrorCodes() []string {
 	// we return a copy
-	ret := make([]string, len(err.errorCodes))
-	copy(ret, err.errorCodes)
+	ret := make([]string, len(fault.ErrorCodes))
+	copy(ret, fault.ErrorCodes)
 	return ret
 }
 
-func (err *defaultFault) HasErrorCode(codes ...string) bool {
+func (fault *defaultFault) HasErrorCode(codes ...string) bool {
 	for _, code := range codes {
-		if slices.Contains(err.errorCodes, code) {
+		if slices.Contains(fault.ErrorCodes, code) {
 			return true
 		}
 	}
 	return false
 }
 
-func (err *defaultFault) GetCause() error {
-	return err.cause
+func (fault *defaultFault) GetCause() error {
+	return fault.cause
 }
 
-func (err *defaultFault) GetSource() string {
-	if len(err.callStack) > 0 {
-		return err.callStack[0]
+func (fault *defaultFault) GetSource() string {
+	if len(fault.callStack) > 0 {
+		return fault.callStack[0]
 	}
 	return ""
 }
 
-func (err *defaultFault) GetCallStack() []string {
+func (fault *defaultFault) GetCallStack() []string {
 	// we return a copy
-	ret := make([]string, len(err.callStack))
-	copy(ret, err.callStack)
+	ret := make([]string, len(fault.callStack))
+	copy(ret, fault.callStack)
 	slices.Reverse(ret)
 	return ret
 }
 
-func (err *defaultFault) AddCallerToCallStack(caller ...string) {
-	err.callStack = append(err.callStack, strings.Join(caller, "."))
+func (fault *defaultFault) AddCallerToCallStack(caller ...string) {
+	fault.callStack = append(fault.callStack, strings.Join(caller, "."))
 }
 
-func (err *defaultFault) IsRetryable() bool {
-	return err.isRetryable
+func (fault *defaultFault) IsRetryable() bool {
+	return fault.Retryable
 }
 
-func (err *defaultFault) GetLabels() map[string]any {
+func (fault *defaultFault) GetLabels() map[string]any {
 	// we return a copy only
-	ret := make(map[string]any, len(err.labels))
-	maps.Copy(ret, err.labels)
+	ret := make(map[string]any, len(fault.Labels))
+	maps.Copy(ret, fault.Labels)
 	return ret
 }
 
-func (err *defaultFault) AddContextToMessage(contextMsgTemplate string) {
+func (fault *defaultFault) AddContextToMessage(contextMsgTemplate string) {
 	if contextMsgTemplate != "" {
 		// we prepend to the message
-		err.messageTemplate = contextMsgTemplate + err.messageTemplate
+		fault.MessageTemplate = contextMsgTemplate + fault.MessageTemplate
 	}
 }
 
-func (err *defaultFault) AddContextToAudienceMessage(forAudience string, contextMsgTemplate string) {
+func (fault *defaultFault) AddContextToAudienceMessage(forAudience string, contextMsgTemplate string) {
 	if contextMsgTemplate != "" && forAudience != "" {
 		_trimmed := ""
-		msg, found := err.messageTemplatesByAudience[forAudience]
+		msg, found := fault.MessageTemplatesByAudience[forAudience]
 		if found {
 			// we prepend to the message
-			err.messageTemplatesByAudience[forAudience] = contextMsgTemplate + msg
+			fault.MessageTemplatesByAudience[forAudience] = contextMsgTemplate + msg
 		}
 		if !found {
 			// will become the message but trimmed way
@@ -324,78 +392,185 @@ func (err *defaultFault) AddContextToAudienceMessage(forAudience string, context
 				// we just do it once
 				_trimmed = strings.TrimRight(contextMsgTemplate, " \t\r\n-:")
 			}
-			err.messageTemplatesByAudience[forAudience] = _trimmed
+			fault.MessageTemplatesByAudience[forAudience] = _trimmed
 		}
 
 	}
 }
 
-func (err *defaultFault) AddErrorCodes(c ...string) {
+func (fault *defaultFault) AddErrorCodes(c ...string) {
 	for _, errCode := range c {
-		if errCode != "" && !slices.Contains(err.errorCodes, errCode) {
-			err.errorCodes = append(err.errorCodes, errCode)
+		if errCode != "" && !slices.Contains(fault.ErrorCodes, errCode) {
+			fault.ErrorCodes = append(fault.ErrorCodes, errCode)
 		}
 	}
 }
 
-func (err *defaultFault) AddLabel(key string, value any) {
+func (fault *defaultFault) AddLabel(key string, value any) {
 	if key != "" {
-		err.labels[key] = value
+		fault.Labels[key] = value
 	}
 }
 
-func (err *defaultFault) AddLabels(labels map[string]any) {
-	maps.Copy(err.labels, labels)
+func (fault *defaultFault) AddLabels(labels map[string]any) {
+	maps.Copy(fault.Labels, labels)
+}
+
+func (fault *defaultFault) GetHttpStatusCode() int {
+	return GetHttpStatusCodeForFault(fault)
+}
+
+func (fault *defaultFault) GetGrpcStatusCode() codes.Code {
+	return GetGrpcStatusCodeForFault(fault)
+}
+
+var (
+	_EMPTY_NATURAL_FORM = naturalFormFault{
+		Kind:       "NaN",
+		Message:    "",
+		ErrorCodes: make([]string, 0),
+		Labels:     make(map[string]any, 0),
+		Retryable:  false,
+	}
+
+	_NONPUBLIC_NATURAL_FORM = naturalFormFault{
+		Kind:       RuntimeFault,
+		Message:    "",
+		ErrorCodes: make([]string, 0),
+		Labels:     make(map[string]any, 0),
+		Retryable:  false,
+	}
+
+	_EMPTY_FAULT = defaultFault{
+		Kind:                       "NaN",
+		MessageTemplate:            "",
+		MessageTemplatesByAudience: make(map[string]string, 0),
+		ErrorCodes:                 make([]string, 0),
+		Labels:                     make(map[string]any, 0),
+		Retryable:                  false,
+	}
+
+	_NONPUBLIC_FAULT = defaultFault{
+		Kind:                       "NaN",
+		MessageTemplate:            "",
+		MessageTemplatesByAudience: make(map[string]string, 0),
+		ErrorCodes:                 make([]string, 0),
+		Labels:                     make(map[string]any, 0),
+		Retryable:                  false,
+	}
+)
+
+func (fault *defaultFault) ToNaturalJSON(forAudience string, options ...SerializationOption) ([]byte, error) {
+	var natural naturalFormFault
+	if fault == nil {
+		natural = _EMPTY_NATURAL_FORM
+	} else if !fault.IsPublic() && !slices.Contains(options, AllowNonPublicSerialization) {
+		natural = _NONPUBLIC_NATURAL_FORM
+		// this is safe to inherit
+		natural.Retryable = fault.Retryable
+	} else {
+		natural = naturalFormFault{
+			Kind:       fault.Kind,
+			Retryable:  fault.Retryable,
+			ErrorCodes: fault.ErrorCodes,
+			Labels:     fault.Labels,
+		}
+		if forAudience == "" {
+			if slices.Contains(options, ResolveMessages) {
+				natural.Message = fault.GetMessage()
+			} else {
+				natural.Message = fault.MessageTemplate
+			}
+		} else {
+			if slices.Contains(options, ResolveMessages) {
+				natural.Message = fault.GetMessageForAudience(forAudience)
+			} else {
+				natural.Message = fault.MessageTemplatesByAudience[forAudience]
+			}
+		}
+	}
+
+	if slices.Contains(options, PrettyPrint) {
+		return json.MarshalIndent(natural, "", "\t")
+	} else {
+		return json.Marshal(natural)
+	}
+}
+
+func (fault *defaultFault) ToFullJSON(options ...SerializationOption) ([]byte, error) {
+	var _fault defaultFault
+	if fault == nil {
+		_fault = _EMPTY_FAULT
+	} else if !fault.IsPublic() && !slices.Contains(options, AllowNonPublicSerialization) {
+		_fault = _NONPUBLIC_FAULT
+		// this is safe to inherit
+		_fault.Retryable = fault.Retryable
+	} else {
+		_fault = *fault
+	}
+
+	if slices.Contains(options, ResolveMessages) {
+		_fault.MessageTemplate = fault.GetMessage()
+		for k, _ := range fault.MessageTemplatesByAudience {
+			_fault.MessageTemplatesByAudience[k] = fault.GetMessageForAudience(k)
+		}
+	}
+
+	if slices.Contains(options, PrettyPrint) {
+		return json.MarshalIndent(_fault, "", "\t")
+	} else {
+		return json.Marshal(_fault)
+	}
 }
 
 // The implementation of Error iface - this considers if the error is public or not.
 // If not public then just prints the resolved message and safe info (to avoid leaking internal info) - otherwise also reveals labels
-func (err *defaultFault) Error() string {
+func (fault *defaultFault) Error() string {
 	codesStr := "[]"
-	if len(err.errorCodes) > 0 {
-		codesStr = fmt.Sprintf("['%s']", strings.Join(err.errorCodes, "','"))
+	if len(fault.ErrorCodes) > 0 {
+		codesStr = fmt.Sprintf("['%s']", strings.Join(fault.ErrorCodes, "','"))
 	}
-	if err.isPublic {
+	if fault.public {
 		return fmt.Sprintf("%s: %s (retryable: %t, errorCodes: %s, labels: %s)",
-			err.kind, err.GetMessage(), err.isRetryable, codesStr, kt_utils.PrintVarS(err.labels, false))
+			fault.Kind, fault.GetMessage(), fault.Retryable, codesStr, kt_utils.PrintVarS(fault.Labels, false))
 	} else {
 		return fmt.Sprintf("%s: %s (retryable: %t, errorCodes: %s)",
-			err.kind, err.GetMessage(), err.isRetryable, codesStr)
+			fault.Kind, fault.GetMessage(), fault.Retryable, codesStr)
 	}
 }
 
 // The fmt.Stringer implementation which is producing complete string representation of the error. Useful for logging purposes.
-func (err *defaultFault) String() string {
+func (fault *defaultFault) String() string {
 	causeStr := "nil"
-	if err.cause != nil {
-		isKtErr, ktErr := IsFault(err.cause)
+	if fault.cause != nil {
+		isKtErr, ktErr := IsFault(fault.cause)
 		if isKtErr {
 			// we use the to string mechanism
 			causeStr = fmt.Sprintf("{%s}", ktErr.String())
 		} else {
 			// we print it normal way
-			causeStr = fmt.Sprintf("'%s'", err.cause)
+			causeStr = fmt.Sprintf("'%s'", fault.cause)
 		}
 
 	}
 	codesStr := "[]"
-	if len(err.errorCodes) > 0 {
-		codesStr = fmt.Sprintf("['%s']", strings.Join(err.errorCodes, "','"))
+	if len(fault.ErrorCodes) > 0 {
+		codesStr = fmt.Sprintf("['%s']", strings.Join(fault.ErrorCodes, "','"))
 	}
 	callStackStr := "[]"
-	if len(err.callStack) > 0 {
-		callStackStr = fmt.Sprintf("['%s']", strings.Join(err.GetCallStack(), "','"))
+	if len(fault.callStack) > 0 {
+		callStackStr = fmt.Sprintf("['%s']", strings.Join(fault.GetCallStack(), "','"))
 	}
 	return fmt.Sprintf(
 		"Fault{type: '%s', msgTemplate: '%s', retryable: %t, public: %t, codes: %s, callStack: %s, cause: %s, audienceMsgs: %s, labels: %s}",
-		err.kind,
-		err.messageTemplate,
-		err.isRetryable,
-		err.isPublic,
+		fault.Kind,
+		fault.MessageTemplate,
+		fault.Retryable,
+		fault.public,
 		codesStr,
 		callStackStr,
 		causeStr,
-		kt_utils.PrintVarS(err.messageTemplatesByAudience, false),
-		kt_utils.PrintVarS(err.labels, false),
+		kt_utils.PrintVarS(fault.MessageTemplatesByAudience, false),
+		kt_utils.PrintVarS(fault.Labels, false),
 	)
 }

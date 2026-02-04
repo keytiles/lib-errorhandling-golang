@@ -6,6 +6,17 @@ We will mark these with Git Tags
 
 # Changes in releases
 
+## release 1.2.0
+
+New features:
+
+- Added support for HTTP and gRPC status codes derived from the Fault. See
+  - utility functions `kt_errors.GetHttpStatusCodeForFault()` and `kt_errors.GetGrpcStatusCodeForFault()`, or
+  - member functions `fault.GetHttpStatusCode()` and `fault.GetGrpcStatusCode()`
+- Added simple support (OK not that bad) to marshal the Fault into JSON forms which could come handy for rapid API and error return developments. See
+  - utility functions `kt_errors.GetFaultAsNaturalJSON()` and `kt_errors.GetFaultAsFullJSON()`, or
+  - member functions `fault.ToNaturalJSON()` and `fault.ToFullJSON()`
+
 ## release 1.1.1
 
 Fixes:
