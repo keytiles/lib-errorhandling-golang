@@ -292,8 +292,8 @@ func TestPublicFaultCreation_fromNonPublicFaultError(t *testing.T) {
 	assert.Equal(t, "user facing message with {var1}", converted.GetMessageTemplate())
 	// Only one audience message remains
 	assert.Equal(t, map[string]string{"audience1": "message with {var3}"}, converted.GetMessageTemplatesByAudience())
-	// and we kept all labels needed to resolve audience messages
-	assert.Equal(t, map[string]any{"var1": "value1", "var3": "value3"}, converted.GetLabels())
+	// and we kept all labels needed to resolve audience messages + the "transactionId"
+	assert.Equal(t, map[string]any{"var1": "value1", "var3": "value3", "transactionId": "trId"}, converted.GetLabels())
 
 }
 

@@ -6,6 +6,14 @@ We will mark these with Git Tags
 
 # Changes in releases
 
+## release 1.1.1
+
+Fixes:
+
+- Fixed default logger name to match with library name: "keytiles.errorhandling"
+- During `kt_errors.NewPublicFaultFromAnyError()` utility method conversion if you provided `transactionId` param now it is always added as "transactionId"
+  label to the converted Fault.
+
 ## release 1.1.0
 
 First practical experiences from adoption quickly showed some new things can be useful.

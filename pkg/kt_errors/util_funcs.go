@@ -43,12 +43,13 @@ func IsFault(err error) (bool, Fault) {
 //
 // Arguments:
 //   - 'original': The error you want to turn into a public `Fault`.
-//   - 'transactionId': If you have a transaction ID pass it here! Then it will appear in the log and also might appear in converted error message. Otherwise
-//     pass empty string simply.
+//   - 'transactionId': If you have a transaction ID pass it here! Then it will appear in the log as label, added to the Fault as "transactionId" label
+//     and also might appear in converted error message. Otherwise pass empty string simply.
 //   - 'loggerToUse': This logger is used to log the original exception so we have it, because the converted error message will not give ANY specific
 //     details back. In case no logger provided then a default Logger will be used for this.
 //   - 'logLabels': You can pass in labels here which will decorate the log event - or if you dont have / want, you can simply pass in the constant
-//     `kt_errors.NO_LOG_LABELS`
+//     `kt_errors.NO_LOG_LABELS`. **Please note:** if you passed in `transactionId` then it is always added to
+//     the log labels! So only for this you have nothing to do here, you can keep this empty.
 func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUse *kt_logging.Logger, logLabels []kt_logging.Label) Fault {
 	if original == nil {
 		return nil
@@ -100,7 +101,7 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 			// and remove this from the msg templates
 			delete(audienceMsgTemplates, MSGAUDIENCE_USER)
 			// and we don't need the transactionId label either
-			builder.WithoutLabels("transactionId")
+			//builder.WithoutLabels("transactionId")
 		}
 		// inherit the remaining audience messages into the new error
 		builder.WithMessageTemplatesByAudience(audienceMsgTemplates)
@@ -125,5 +126,5 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 }
 
 func getDefaultLogger() *kt_logging.Logger {
-	return kt_logging.GetLogger("keytiles.advancederrors")
+	return kt_logging.GetLogger("keytiles.errorhandling")
 }
