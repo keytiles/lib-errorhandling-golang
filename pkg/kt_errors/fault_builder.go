@@ -30,10 +30,16 @@ type FaultBuilder struct {
 
 func (builder *FaultBuilder) Build() Fault {
 	_fault := builder.fault
+
 	// labels remain mutable - so we need a copy there from the builder
-	_fault.Labels = builder.fault.GetLabels()
+	if builder.fault.Labels != nil {
+		_fault.Labels = builder.fault.GetLabels()
+	}
+
 	// assemble error codes
-	_fault.ErrorCodes = builder.errCodes.GetAll()
+	if builder.errCodes.Size() > 0 {
+		_fault.ErrorCodes = builder.errCodes.GetAll()
+	}
 
 	// review the isRetryable flag
 	if builder.fault.Retryable {
@@ -77,26 +83,46 @@ func (builder *FaultBuilder) WithMessageTemplate(msg string) *FaultBuilder {
 
 // Sets a message template for a specific audience.
 func (builder *FaultBuilder) WithMessageTemplateForAudience(forAudience string, msg string) *FaultBuilder {
+	if builder.fault.MessageTemplatesByAudience == nil {
+		builder.fault.MessageTemplatesByAudience = make(map[string]string)
+	}
 	builder.fault.MessageTemplatesByAudience[forAudience] = msg
 	return builder
 }
 
 // If you changed your mind you can remove the template for this audience
 func (builder *FaultBuilder) WithoutMessageTemplateForAudiences(forAudiences ...string) *FaultBuilder {
+	if builder.fault.MessageTemplatesByAudience == nil {
+		return builder
+	}
 	for _, audience := range forAudiences {
 		delete(builder.fault.MessageTemplatesByAudience, audience)
+	}
+	if len(builder.fault.MessageTemplatesByAudience) == 0 {
+		builder.fault.MessageTemplatesByAudience = nil
 	}
 	return builder
 }
 
 // Adds all audience message templates to the error - this is a merge.
 func (builder *FaultBuilder) WithMessageTemplatesByAudience(templates map[string]string) *FaultBuilder {
+	if len(templates) == 0 {
+		return builder
+	}
+	if builder.fault.MessageTemplatesByAudience == nil {
+		builder.fault.MessageTemplatesByAudience = make(map[string]string, len(templates))
+	}
 	maps.Copy(builder.fault.MessageTemplatesByAudience, templates)
 	return builder
 }
 
 // Adds all audience message templates to the error - and these will override the possibly existing ones.
 func (builder *FaultBuilder) WithExactMessageTemplatesByAudience(templates map[string]string) *FaultBuilder {
+	if len(templates) == 0 {
+		builder.fault.MessageTemplatesByAudience = nil
+		return builder
+	}
+
 	builder.fault.MessageTemplatesByAudience = make(map[string]string, len(templates))
 	maps.Copy(builder.fault.MessageTemplatesByAudience, templates)
 	return builder
@@ -140,14 +166,20 @@ func (builder *FaultBuilder) WithoutErrorCodes(c ...string) *FaultBuilder {
 
 // Attaching a label (key-value pair) to this error.
 func (builder *FaultBuilder) WithLabel(key string, value any) *FaultBuilder {
-	builder.fault.Labels[key] = value
+	builder.fault.AddLabel(key, value)
 	return builder
 }
 
 // If you changed your mind you can remove specific labels (key-value pair) from this error.
 func (builder *FaultBuilder) WithoutLabels(keys ...string) *FaultBuilder {
+	if builder.fault.Labels == nil {
+		return builder
+	}
 	for _, key := range keys {
 		delete(builder.fault.Labels, key)
+	}
+	if len(builder.fault.Labels) == 0 {
+		builder.fault.Labels = nil
 	}
 	return builder
 }
@@ -155,12 +187,16 @@ func (builder *FaultBuilder) WithoutLabels(keys ...string) *FaultBuilder {
 // You can attach multiple labels (key-value pairs) in one go if you wish with this method.
 // Please note that these will be simply merged into the existing labels! See also `WithExactLabels()` method!
 func (builder *FaultBuilder) WithLabels(labels map[string]any) *FaultBuilder {
-	maps.Copy(builder.fault.Labels, labels)
+	builder.fault.AddLabels(labels)
 	return builder
 }
 
 // Sets the labels (key-value pairs) attached to this error to the given map - all previous labels will be removed.
 func (builder *FaultBuilder) WithExactLabels(labels map[string]any) *FaultBuilder {
+	if len(labels) == 0 {
+		builder.fault.Labels = nil
+		return builder
+	}
 	builder.fault.Labels = make(map[string]any, len(labels))
 	maps.Copy(builder.fault.Labels, labels)
 	return builder

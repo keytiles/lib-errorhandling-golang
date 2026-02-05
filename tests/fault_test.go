@@ -11,9 +11,37 @@ import (
 
 func TestNonPublicBuilderAndFault(t *testing.T) {
 
+	// ==================
+	// Scenario 1
+	// ==================
+	// We go with super minimalistic info - will leave all arrays/maps Nil in the fault
+
+	builder := kt_errors.NewFaultBuilder(kt_errors.IllegalStateFault).
+		WithMessageTemplate("message with var={var1} and unknown {unknown_var}")
+
+	// ---- WHEN
+	fault := builder.Build()
+	// ---- THEN
+	assert.Error(t, fault)
+	assert.Equal(t, kt_errors.IllegalStateFault, fault.GetKind())
+	assert.False(t, fault.IsPublic())
+	assert.False(t, fault.IsRetryable())
+	assert.Nil(t, fault.GetCause())
+	assert.Equal(t, "message with var={var1} and unknown {unknown_var}", fault.GetMessage())
+	assert.Equal(t, "", fault.GetMessageForAudience("any"))
+	assert.Equal(t, "", fault.GetMessageTemplateForAudience("any"))
+	assert.Equal(t, 0, len(fault.GetErrorCodes()))
+	assert.Equal(t, 0, len(fault.GetMessageTemplatesByAudience()))
+	assert.Equal(t, 0, len(fault.GetLabels()))
+
+	// ==================
+	// Scenario 2
+	// ==================
+	// Now we go with full data rich stuff
+
 	// ---- GIVEN
 	cause := fmt.Errorf("cause error")
-	builder := kt_errors.NewFaultBuilder(kt_errors.IllegalStateFault).
+	builder = kt_errors.NewFaultBuilder(kt_errors.IllegalStateFault).
 		WithMessageTemplate("message with var={var1} and unknown {unknown_var}").
 		WithMessageTemplateForAudience(kt_errors.MSGAUDIENCE_USER, "user message with var={var1}").
 		WithErrorCodes(kt_errors.ILLEGALSTATE_ERRCODE_CONFIG_ERROR, "remove_this").
@@ -25,7 +53,7 @@ func TestNonPublicBuilderAndFault(t *testing.T) {
 		WithCause(cause)
 
 	// ---- WHEN
-	fault := builder.Build()
+	fault = builder.Build()
 	// ---- THEN
 	assert.Error(t, fault)
 	assert.Equal(t, kt_errors.IllegalStateFault, fault.GetKind())
@@ -153,7 +181,7 @@ func TestPublicBuilderAndFault(t *testing.T) {
 	// ---- THEN
 	assert.Equal(
 		t,
-		"Fault{type: 'illegal_state', msgTemplate: 'message with var={var1} and unknown {unknown_var}', retryable: true, public: true, codes: ['internal_error'], callStack: [], cause: nil, audienceMsgs: map[string]string{}, labels: map[string]interface{}{\"var1\":\"value1\"}}",
+		"Fault{type: 'illegal_state', msgTemplate: 'message with var={var1} and unknown {unknown_var}', retryable: true, public: true, codes: ['internal_error'], callStack: [], cause: nil, audienceMsgs: {}, labels: map[string]interface{}{\"var1\":\"value1\"}}",
 		tostring_result,
 	)
 
@@ -641,4 +669,31 @@ func TestPublicFaultFullJSONSerialization(t *testing.T) {
 	)
 	// original fault should have not been modified anyhow!
 	assert.Equal(t, controlFault, fault)
+}
+
+func TestAbsolutMinimalisticPublicFaultJSONSerialization(t *testing.T) {
+
+	// ---- GIVEN
+
+	fault := kt_errors.NewPublicFaultBuilder(kt_errors.IllegalStateFault).
+		WithMessageTemplate("message with var={var1} and unknown {unknown_var}").
+		Build()
+
+	// ==================
+	// Scenario 1
+	// ==================
+	// We go to "natural" JSON representation
+
+	// ---- WHEN
+	json, err := fault.ToNaturalJSON("")
+	// ---- THEN
+	assert.NoError(t, err)
+	// no details should be exposed
+	jsonStr := string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"message with var={var1} and unknown {unknown_var}","isRetryable":false,"errorCodes":[],"labels":{}}`,
+		jsonStr,
+	)
+
 }

@@ -6,6 +6,14 @@ We will mark these with Git Tags
 
 # Changes in releases
 
+## release 1.3.1
+
+Fixes:
+
+- Just internal restructuring - switching errorCodes, labels and audience message arrays/maps into lazy init mode. They get created only when really used but
+  until this they remain Nil.
+- New test cases added to check functionality.
+
 ## release 1.3.0
 
 Fixes:

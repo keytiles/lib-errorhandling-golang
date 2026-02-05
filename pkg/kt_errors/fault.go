@@ -271,10 +271,11 @@ type Fault interface {
 
 func newInitializedFault(errType FaultKind) defaultFault {
 	return defaultFault{
-		Kind:                       errType,
-		Labels:                     make(map[string]any, 0),
-		MessageTemplatesByAudience: make(map[string]string, 0),
-		callStack:                  make([]string, 0, 4),
+		Kind: errType,
+		// lets keep these on Nil until first used
+		//Labels:                     make(map[string]any, 0),
+		//MessageTemplatesByAudience: make(map[string]string, 0),
+		callStack: make([]string, 0, 4),
 	}
 }
 
@@ -294,6 +295,7 @@ type defaultFault struct {
 	Retryable                  bool              `json:"isRetryable" yaml:"isRetryable"`
 	ErrorCodes                 []string          `json:"errorCodes" yaml:"errorCodes"`
 	Labels                     map[string]any    `json:"labels" yaml:"labels"`
+	properties                 map[string]any
 	public                     bool
 	cause                      error
 	callStack                  []string
@@ -312,14 +314,23 @@ func (fault *defaultFault) GetMessage() string {
 }
 
 func (fault *defaultFault) GetMessageTemplateForAudience(forAudience string) string {
+	if fault.MessageTemplatesByAudience == nil {
+		return ""
+	}
 	return fault.MessageTemplatesByAudience[forAudience]
 }
 
 func (fault *defaultFault) GetMessageForAudience(forAudience string) string {
+	if fault.MessageTemplatesByAudience == nil {
+		return ""
+	}
 	return kt_utils.StringSimpleResolve(fault.GetMessageTemplateForAudience(forAudience), fault.Labels)
 }
 
 func (fault *defaultFault) GetMessageTemplatesByAudience() map[string]string {
+	if fault.MessageTemplatesByAudience == nil {
+		return make(map[string]string)
+	}
 	// we return a copy only
 	ret := make(map[string]string, len(fault.MessageTemplatesByAudience))
 	maps.Copy(ret, fault.MessageTemplatesByAudience)
@@ -331,6 +342,10 @@ func (fault *defaultFault) IsPublic() bool {
 }
 
 func (fault *defaultFault) GetErrorCodes() []string {
+	if fault.ErrorCodes == nil {
+		// we return empty
+		return make([]string, 0)
+	}
 	// we return a copy
 	ret := make([]string, len(fault.ErrorCodes))
 	copy(ret, fault.ErrorCodes)
@@ -338,6 +353,9 @@ func (fault *defaultFault) GetErrorCodes() []string {
 }
 
 func (fault *defaultFault) HasErrorCode(codes ...string) bool {
+	if fault.ErrorCodes == nil {
+		return false
+	}
 	for _, code := range codes {
 		if slices.Contains(fault.ErrorCodes, code) {
 			return true
@@ -374,6 +392,10 @@ func (fault *defaultFault) IsRetryable() bool {
 }
 
 func (fault *defaultFault) GetLabels() map[string]any {
+	if fault.Labels == nil {
+		// we return empty map
+		return make(map[string]any)
+	}
 	// we return a copy only
 	ret := make(map[string]any, len(fault.Labels))
 	maps.Copy(ret, fault.Labels)
@@ -408,6 +430,9 @@ func (fault *defaultFault) AddContextToAudienceMessage(forAudience string, conte
 }
 
 func (fault *defaultFault) AddErrorCodes(c ...string) {
+	if fault.ErrorCodes == nil {
+		fault.ErrorCodes = make([]string, 0, len(c))
+	}
 	for _, errCode := range c {
 		if errCode != "" && !slices.Contains(fault.ErrorCodes, errCode) {
 			fault.ErrorCodes = append(fault.ErrorCodes, errCode)
@@ -417,11 +442,22 @@ func (fault *defaultFault) AddErrorCodes(c ...string) {
 
 func (fault *defaultFault) AddLabel(key string, value any) {
 	if key != "" {
+		// lets lazy-create map if not created yet
+		if fault.Labels == nil {
+			fault.Labels = make(map[string]any)
+		}
 		fault.Labels[key] = value
 	}
 }
 
 func (fault *defaultFault) AddLabels(labels map[string]any) {
+	if labels == nil {
+		return
+	}
+	// lets lazy-create map if not created yet
+	if fault.Labels == nil {
+		fault.Labels = make(map[string]any, len(labels))
+	}
 	maps.Copy(fault.Labels, labels)
 }
 
@@ -483,14 +519,22 @@ func (fault *defaultFault) ToNaturalJSON(forAudience string, options ...Serializ
 			Retryable:  fault.Retryable,
 			ErrorCodes: fault.ErrorCodes,
 		}
+		if natural.ErrorCodes == nil {
+			natural.ErrorCodes = make([]string, 0)
+		}
+
 		resolveMessages := slices.Contains(options, ResolveMessages)
 		leaveVars := slices.Contains(options, LeaveMessageVarsInLabels)
+
 		if resolveMessages && !leaveVars {
-			// it is possible we will manipulate the labels - so we need a copy
+			// we need a copy / empty map
 			natural.Labels = fault.GetLabels()
 		} else {
 			// for sure we will not manipulate labels - we dont need copy
 			natural.Labels = fault.Labels
+		}
+		if natural.Labels == nil {
+			natural.Labels = make(map[string]any)
 		}
 
 		var msgVars ktsets.Set[string]
@@ -614,6 +658,15 @@ func (fault *defaultFault) String() string {
 	if len(fault.callStack) > 0 {
 		callStackStr = fmt.Sprintf("['%s']", strings.Join(fault.GetCallStack(), "','"))
 	}
+	audMsgsStr := "{}"
+	if len(fault.MessageTemplatesByAudience) > 0 {
+		audMsgsStr = kt_utils.PrintVarS(fault.MessageTemplatesByAudience, false)
+	}
+	labStr := "{}"
+	if len(fault.Labels) > 0 {
+		labStr = kt_utils.PrintVarS(fault.Labels, false)
+	}
+
 	return fmt.Sprintf(
 		"Fault{type: '%s', msgTemplate: '%s', retryable: %t, public: %t, codes: %s, callStack: %s, cause: %s, audienceMsgs: %s, labels: %s}",
 		fault.Kind,
@@ -623,7 +676,7 @@ func (fault *defaultFault) String() string {
 		codesStr,
 		callStackStr,
 		causeStr,
-		kt_utils.PrintVarS(fault.MessageTemplatesByAudience, false),
-		kt_utils.PrintVarS(fault.Labels, false),
+		audMsgsStr,
+		labStr,
 	)
 }
