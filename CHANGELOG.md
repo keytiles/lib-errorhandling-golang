@@ -6,6 +6,22 @@ We will mark these with Git Tags
 
 # Changes in releases
 
+## release 1.3.0
+
+Fixes:
+
+- `FaultBuilder` got mutated when built `Fault` was mutated e.g. with adding labels. This happened because instead of passing a map copy into the Fault we
+  passed the map by reference. Now this is fixed and several test cases added to test this behavior.
+- `fault.ToFullJSON()` serializer was incorrect - it mutated the original Fault if features like `ResolveMessages` was applied. Now it is fixed and test cases
+  were added to make sure orig Fault is never mutated accidentally
+
+New features:
+
+- From now on the JSON serializers `fault.ToFullJSON()` or `fault.ToNaturalJSON()` if `ResolveMessages` option applied will remove those {var} entries from
+  the labels section (in the JSON) which are used in message / audience message. As typically those vars are added to labels for this resolving possibility
+  and if the msgs already resolved you probably don't want them there too anymore (as they became part of the text). But if you do, a new option was
+  introduced `LeaveMessageVarsInLabels` which prevents this behavior.
+
 ## release 1.2.0
 
 New features:

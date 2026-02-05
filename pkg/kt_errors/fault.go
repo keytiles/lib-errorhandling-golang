@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/keytiles/lib-sets-golang/ktsets"
 	"github.com/keytiles/lib-utils-golang/pkg/kt_utils"
 	"google.golang.org/grpc/codes"
 )
@@ -55,6 +56,9 @@ const (
 	ILLEGALSTATE_ERRCODE_TIMED_OUT = "timed_out"
 	// Something has reached its limits - no more is possible
 	ILLEGALSTATE_ERRCODE_EXHAUSTED = "exhausted"
+	// You can use this if you think this error only possible if we clearly have a bug in the code.
+	// Time to time happens you find yourself in an error handling case you know "this is impossible" if I find myself here.
+	ILLEGALSTATE_ERRCODE_CODE_BUG = "code_bug"
 
 	// Use this error code if you expected something else as a type
 	VALIDATION_ERRCODE_WRONG_DATATYPE = "wrong_datatype"
@@ -104,12 +108,17 @@ type SerializationOption int
 
 const (
 	// If set then the possible {var} variables are getting resolved from the labels in the messages before returned.
+	// And in this case these {var} variables by default also removed from the labels as they became part of the message - unless
+	// you pass `LeaveMessageVarsInLabels` option.
 	ResolveMessages SerializationOption = 1
+	// If `ResolveMessages` is used but you explicitly want to leave the {var} variables in the labels (removed by default as they) use this option.
+	LeaveMessageVarsInLabels = 2
+
 	// If set then the JSON is indented with line breaks and tabs so becomes more human readable
-	PrettyPrint = 2
+	PrettyPrint = 3
 	// By default the serialization only happens if Fault is public - to prevent data leak non-public Faults simply returning blank form.
 	// But if you set this option explicitly then this defense mechanism gets disabled.
-	AllowNonPublicSerialization = 3
+	AllowNonPublicSerialization = 4
 )
 
 // Our unified, data rich Keytiles-internal error which is able to carry many and all necessarry information and let it bubble up from literally any layers:
@@ -473,19 +482,40 @@ func (fault *defaultFault) ToNaturalJSON(forAudience string, options ...Serializ
 			Kind:       fault.Kind,
 			Retryable:  fault.Retryable,
 			ErrorCodes: fault.ErrorCodes,
-			Labels:     fault.Labels,
 		}
+		resolveMessages := slices.Contains(options, ResolveMessages)
+		leaveVars := slices.Contains(options, LeaveMessageVarsInLabels)
+		if resolveMessages && !leaveVars {
+			// it is possible we will manipulate the labels - so we need a copy
+			natural.Labels = fault.GetLabels()
+		} else {
+			// for sure we will not manipulate labels - we dont need copy
+			natural.Labels = fault.Labels
+		}
+
+		var msgVars ktsets.Set[string]
 		if forAudience == "" {
-			if slices.Contains(options, ResolveMessages) {
+			if resolveMessages {
 				natural.Message = fault.GetMessage()
+				if !leaveVars {
+					msgVars = kt_utils.StringExtractVariableNames(fault.MessageTemplate)
+				}
 			} else {
 				natural.Message = fault.MessageTemplate
 			}
 		} else {
-			if slices.Contains(options, ResolveMessages) {
+			if resolveMessages {
 				natural.Message = fault.GetMessageForAudience(forAudience)
+				if !leaveVars {
+					msgVars = kt_utils.StringExtractVariableNames(fault.MessageTemplatesByAudience[forAudience])
+				}
 			} else {
 				natural.Message = fault.MessageTemplatesByAudience[forAudience]
+			}
+		}
+		if msgVars.Size() > 0 {
+			for _, k := range msgVars.GetAll() {
+				delete(natural.Labels, k)
 			}
 		}
 	}
@@ -498,6 +528,10 @@ func (fault *defaultFault) ToNaturalJSON(forAudience string, options ...Serializ
 }
 
 func (fault *defaultFault) ToFullJSON(options ...SerializationOption) ([]byte, error) {
+
+	resolveMessages := slices.Contains(options, ResolveMessages)
+	leaveVars := slices.Contains(options, LeaveMessageVarsInLabels)
+
 	var _fault defaultFault
 	if fault == nil {
 		_fault = _EMPTY_FAULT
@@ -507,12 +541,31 @@ func (fault *defaultFault) ToFullJSON(options ...SerializationOption) ([]byte, e
 		_fault.Retryable = fault.Retryable
 	} else {
 		_fault = *fault
+		if resolveMessages && !leaveVars {
+			// we need a copy of labels - as we might manipulate them and this should not affect original
+			_fault.Labels = fault.GetLabels()
+		}
 	}
 
-	if slices.Contains(options, ResolveMessages) {
+	if resolveMessages {
+		var msgVars ktsets.Set[string]
 		_fault.MessageTemplate = fault.GetMessage()
-		for k, _ := range fault.MessageTemplatesByAudience {
+		if !leaveVars {
+			msgVars = kt_utils.StringExtractVariableNames(fault.MessageTemplate)
+		}
+		// we need to work on a copy before we alter it - to avoid changing original
+		_fault.MessageTemplatesByAudience = make(map[string]string, len(fault.MessageTemplatesByAudience))
+		for k := range fault.MessageTemplatesByAudience {
 			_fault.MessageTemplatesByAudience[k] = fault.GetMessageForAudience(k)
+			if !leaveVars {
+				msgVars.Union(kt_utils.StringExtractVariableNames(fault.MessageTemplatesByAudience[k]))
+			}
+		}
+
+		if msgVars.Size() > 0 {
+			for _, k := range msgVars.GetAll() {
+				delete(_fault.Labels, k)
+			}
 		}
 	}
 

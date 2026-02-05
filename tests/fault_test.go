@@ -94,6 +94,17 @@ func TestNonPublicBuilderAndFault(t *testing.T) {
 	// ---- THEN
 	// since this is an error (interface) the .Error() function is used in above case by Go
 	assert.Equal(t, "error printing: "+fault.String(), str_varp)
+
+	// now lets test that if we mutate the Fault that does not mutate the builder for sure and vice-versa
+
+	// ---- WHEN
+	fault.AddErrorCodes("new_err")
+	fault.AddLabel("new_label", "buu")
+	rebuiltFault := builder.Build()
+	// ---- THEN
+	assert.Equal(t, 1, len(rebuiltFault.GetErrorCodes()))
+	assert.True(t, rebuiltFault.HasErrorCode(kt_errors.ILLEGALSTATE_ERRCODE_CONFIG_ERROR))
+	assert.Equal(t, map[string]any{"var1": "value1"}, rebuiltFault.GetLabels())
 }
 
 func TestPublicBuilderAndFault(t *testing.T) {
@@ -151,6 +162,18 @@ func TestPublicBuilderAndFault(t *testing.T) {
 	// ---- THEN
 	// since this is an error (interface) the .Error() function is used in above case by Go
 	assert.Equal(t, "error printing: "+fault.Error(), str)
+
+	// now lets test that if we mutate the Fault that does not mutate the builder for sure and vice-versa
+
+	// ---- WHEN
+	fault.AddErrorCodes("new_err")
+	fault.AddLabel("new_label", "buu")
+	rebuiltFault := builder.Build()
+	// ---- THEN
+	assert.Equal(t, 1, len(rebuiltFault.GetErrorCodes()))
+	assert.True(t, rebuiltFault.HasErrorCode("internal_error"))
+	assert.Equal(t, map[string]any{"var1": "value1"}, rebuiltFault.GetLabels())
+
 }
 
 func TestPublicFaultCreation_fromPublicFault(t *testing.T) {
@@ -361,7 +384,7 @@ func TestAddingMoreContextToFault(t *testing.T) {
 	assert.True(t, fault.HasErrorCode("amended_err_code"))
 }
 
-func TestNonPublicFaultMaturalJSONSerialization(t *testing.T) {
+func TestNonPublicFaultNaturalJSONSerialization(t *testing.T) {
 
 	// ---- GIVEN
 
@@ -412,7 +435,7 @@ func TestNonPublicFaultMaturalJSONSerialization(t *testing.T) {
 	// ==================
 	// Scenario 3
 	// ==================
-	// And error message resolving also works
+	// And error message resolving also works as expected
 
 	// ---- WHEN
 	json, err = fault.ToNaturalJSON("", kt_errors.AllowNonPublicSerialization, kt_errors.ResolveMessages)
@@ -422,7 +445,7 @@ func TestNonPublicFaultMaturalJSONSerialization(t *testing.T) {
 	jsonStr = string(json)
 	assert.Equal(
 		t,
-		`{"kind":"illegal_state","message":"message with var=value1 and unknown {unknown_var}","isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
+		`{"kind":"illegal_state","message":"message with var=value1 and unknown {unknown_var}","isRetryable":true,"errorCodes":["config_error"],"labels":{}}`,
 		jsonStr,
 	)
 }
@@ -432,14 +455,14 @@ func TestPublicFaultNaturalJSONSerialization(t *testing.T) {
 	// ---- GIVEN
 
 	// we create a Fault - non-public but this does not matter now much
-	fault := kt_errors.NewPublicFaultBuilder(kt_errors.IllegalStateFault).
+	faultBuilder := kt_errors.NewPublicFaultBuilder(kt_errors.IllegalStateFault).
 		WithIsRetryable(true).
 		WithMessageTemplate("message with var={var1} and unknown {unknown_var}").
 		WithMessageTemplateForAudience("operator", "message for operators var={var1}").
 		WithErrorCodes(kt_errors.ILLEGALSTATE_ERRCODE_CONFIG_ERROR).
 		WithLabel("var1", "value1").
-		WithSource("mymodule", "myfunction").
-		Build()
+		WithSource("mymodule", "myfunction")
+	fault := faultBuilder.Build()
 
 	// ==================
 	// Scenario 1
@@ -461,10 +484,28 @@ func TestPublicFaultNaturalJSONSerialization(t *testing.T) {
 	// ==================
 	// Scenario 2
 	// ==================
-	// And error message resolving also works
+	// And error message resolving also works - and this should by default remove labels which were used in the messages as vars as they are not needed being a
+	// label anymore.
 
 	// ---- WHEN
 	json, err = fault.ToNaturalJSON("", kt_errors.ResolveMessages)
+	// ---- THEN
+	assert.NoError(t, err)
+	// we should see all details
+	jsonStr = string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"message with var=value1 and unknown {unknown_var}","isRetryable":true,"errorCodes":["config_error"],"labels":{}}`,
+		jsonStr,
+	)
+
+	// ==================
+	// Scenario 2b
+	// ==================
+	// But if we specify 'LeaveMessageVarsInLabels' opt label stays.
+
+	// ---- WHEN
+	json, err = fault.ToNaturalJSON("", kt_errors.ResolveMessages, kt_errors.LeaveMessageVarsInLabels)
 	// ---- THEN
 	assert.NoError(t, err)
 	// we should see all details
@@ -478,24 +519,7 @@ func TestPublicFaultNaturalJSONSerialization(t *testing.T) {
 	// ==================
 	// Scenario 3
 	// ==================
-	// If we request "operator" message that is returned
-
-	// ---- WHEN
-	json, err = fault.ToNaturalJSON("operator", kt_errors.ResolveMessages)
-	// ---- THEN
-	assert.NoError(t, err)
-	// we should see all details
-	jsonStr = string(json)
-	assert.Equal(
-		t,
-		`{"kind":"illegal_state","message":"message for operators var=value1","isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
-		jsonStr,
-	)
-
-	// ==================
-	// Scenario 4
-	// ==================
-	// But if we request not existing audience empty message is returned
+	// If we request not existing audience empty message is returned
 
 	// ---- WHEN
 	json, err = fault.ToNaturalJSON("unknown-audience", kt_errors.ResolveMessages)
@@ -509,6 +533,40 @@ func TestPublicFaultNaturalJSONSerialization(t *testing.T) {
 		jsonStr,
 	)
 
+	// ==================
+	// Scenario 4
+	// ==================
+	// If we request "operator" message that is returned - and again, {var1} label removed
+
+	// ---- WHEN
+	json, err = fault.ToNaturalJSON("operator", kt_errors.ResolveMessages)
+	// ---- THEN
+	assert.NoError(t, err)
+	// we should see all details
+	jsonStr = string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"message for operators var=value1","isRetryable":true,"errorCodes":["config_error"],"labels":{}}`,
+		jsonStr,
+	)
+
+	// ==================
+	// Scenario 4b
+	// ==================
+	// But if we specify 'LeaveMessageVarsInLabels' opt then label stays.
+
+	// ---- WHEN
+	json, err = fault.ToNaturalJSON("operator", kt_errors.ResolveMessages, kt_errors.LeaveMessageVarsInLabels)
+	// ---- THEN
+	assert.NoError(t, err)
+	// we should see all details
+	jsonStr = string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"message for operators var=value1","isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
+		jsonStr,
+	)
+
 }
 
 func TestPublicFaultFullJSONSerialization(t *testing.T) {
@@ -516,14 +574,18 @@ func TestPublicFaultFullJSONSerialization(t *testing.T) {
 	// ---- GIVEN
 
 	// we create a Fault - non-public but this does not matter now much
-	fault := kt_errors.NewPublicFaultBuilder(kt_errors.IllegalStateFault).
+	faultBuilder := kt_errors.NewPublicFaultBuilder(kt_errors.IllegalStateFault).
 		WithIsRetryable(true).
 		WithMessageTemplate("message with var={var1} and unknown {unknown_var}").
-		WithMessageTemplateForAudience("operator", "message for operators var={var1}").
+		WithMessageTemplateForAudience("operator", "message for operators var={var2}").
 		WithErrorCodes(kt_errors.ILLEGALSTATE_ERRCODE_CONFIG_ERROR).
 		WithLabel("var1", "value1").
-		WithSource("mymodule", "myfunction").
-		Build()
+		WithLabel("var2", "value2").
+		WithLabel("var3", "value3").
+		WithSource("mymodule", "myfunction")
+	fault := faultBuilder.Build()
+	controlFault := faultBuilder.Build()
+	assert.Equal(t, fault, controlFault)
 
 	// ==================
 	// Scenario 1
@@ -538,14 +600,14 @@ func TestPublicFaultFullJSONSerialization(t *testing.T) {
 	jsonStr := string(json)
 	assert.Equal(
 		t,
-		`{"kind":"illegal_state","message":"message with var={var1} and unknown {unknown_var}","messagesByAudience":{"operator":"message for operators var={var1}"},"isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
+		`{"kind":"illegal_state","message":"message with var={var1} and unknown {unknown_var}","messagesByAudience":{"operator":"message for operators var={var2}"},"isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1","var2":"value2","var3":"value3"}}`,
 		jsonStr,
 	)
 
 	// ==================
 	// Scenario 2
 	// ==================
-	// We should see all details and resolving also works
+	// We should see all details and resolving also works (this removes labels too)
 
 	// ---- WHEN
 	json, err = fault.ToFullJSON(kt_errors.ResolveMessages)
@@ -555,7 +617,28 @@ func TestPublicFaultFullJSONSerialization(t *testing.T) {
 	jsonStr = string(json)
 	assert.Equal(
 		t,
-		`{"kind":"illegal_state","message":"message with var=value1 and unknown {unknown_var}","messagesByAudience":{"operator":"message for operators var=value1"},"isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1"}}`,
+		`{"kind":"illegal_state","message":"message with var=value1 and unknown {unknown_var}","messagesByAudience":{"operator":"message for operators var=value2"},"isRetryable":true,"errorCodes":["config_error"],"labels":{"var3":"value3"}}`,
 		jsonStr,
 	)
+	// original fault should have not been modified anyhow!
+	assert.Equal(t, controlFault, fault)
+
+	// ==================
+	// Scenario 2b
+	// ==================
+	// Same as 2 but now we tell the method not to leave labels even after resolving
+
+	// ---- WHEN
+	json, err = fault.ToFullJSON(kt_errors.ResolveMessages, kt_errors.LeaveMessageVarsInLabels)
+	// ---- THEN
+	assert.NoError(t, err)
+	// we should see all details
+	jsonStr = string(json)
+	assert.Equal(
+		t,
+		`{"kind":"illegal_state","message":"message with var=value1 and unknown {unknown_var}","messagesByAudience":{"operator":"message for operators var=value2"},"isRetryable":true,"errorCodes":["config_error"],"labels":{"var1":"value1","var2":"value2","var3":"value3"}}`,
+		jsonStr,
+	)
+	// original fault should have not been modified anyhow!
+	assert.Equal(t, controlFault, fault)
 }

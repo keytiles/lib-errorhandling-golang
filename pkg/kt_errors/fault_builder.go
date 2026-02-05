@@ -29,7 +29,12 @@ type FaultBuilder struct {
 }
 
 func (builder *FaultBuilder) Build() Fault {
-	builder.fault.ErrorCodes = builder.errCodes.GetAll()
+	_fault := builder.fault
+	// labels remain mutable - so we need a copy there from the builder
+	_fault.Labels = builder.fault.GetLabels()
+	// assemble error codes
+	_fault.ErrorCodes = builder.errCodes.GetAll()
+
 	// review the isRetryable flag
 	if builder.fault.Retryable {
 		switch builder.fault.Kind {
@@ -43,7 +48,8 @@ func (builder *FaultBuilder) Build() Fault {
 			}
 		}
 	}
-	return &builder.fault
+
+	return &_fault
 }
 
 // Sets if this error is retryable or not.
