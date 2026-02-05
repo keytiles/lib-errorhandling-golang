@@ -66,6 +66,16 @@ func TestNonPublicBuilderAndFault(t *testing.T) {
 	assert.Equal(t, 1, len(fault.GetErrorCodes()))
 	assert.True(t, fault.HasErrorCode(kt_errors.ILLEGALSTATE_ERRCODE_CONFIG_ERROR))
 	assert.Equal(t, map[string]any{"var1": "value1"}, fault.GetLabels())
+	// ---- WHEN
+	label, found := fault.GetLabel("not-exist")
+	// ---- THEN
+	assert.Nil(t, label)
+	assert.False(t, found)
+	// ---- WHEN
+	label, found = fault.GetLabel("var1")
+	// ---- THEN
+	assert.Equal(t, "value1", label)
+	assert.True(t, found)
 
 	// ---- GIVEN
 	// let's add a caller to the stack!
@@ -133,6 +143,7 @@ func TestNonPublicBuilderAndFault(t *testing.T) {
 	assert.Equal(t, 1, len(rebuiltFault.GetErrorCodes()))
 	assert.True(t, rebuiltFault.HasErrorCode(kt_errors.ILLEGALSTATE_ERRCODE_CONFIG_ERROR))
 	assert.Equal(t, map[string]any{"var1": "value1"}, rebuiltFault.GetLabels())
+
 }
 
 func TestPublicBuilderAndFault(t *testing.T) {

@@ -167,19 +167,24 @@ type Fault interface {
 	// If there is no template for the requested audience, empty string is returned.
 	GetMessageForAudience(forAudience string) string
 	// Returns map view of message templates by audiences.
+	// **Note:** This always makes and returns a copy so use it accordingly!
 	GetMessageTemplatesByAudience() map[string]string
 	// Tells if this error is suitable to leave the private boundary or not (public = no implementation details leaking for sure).
 	IsPublic() bool
 	// We extend the error with the possibility of check if error is retryable.
 	IsRetryable() bool
 	// Returns all associated error codes.
+	// **Note:** This always makes and returns a copy so use it accordingly! If possible use `HasErrorCode()` instead.
 	GetErrorCodes() []string
-	// Tells if this error is carrying any of the listed error codes or not.
+	// Tells if this error is carrying ANY of the listed error codes or not.
 	HasErrorCode(codes ...string) bool
 	// Returns the Cause of this error - which is another (any) error.
 	GetCause() error
-	// Errors can carry a set of labels.
+	// Errors can carry a set of labels. This returns them all.
+	// **Note:** This always makes and returns a copy so use it accordingly! If you can use `GetLabel()` method instead.
 	GetLabels() map[string]any
+	// Returns a specific label if Fault has it - or Nil if does not have it. You can also take and use the returned `found` flag.
+	GetLabel(key string) (value any, found bool)
 	// Error supports tracking the call chain. You can optionally use this (or not, up to you). But if you do, this method returns the content of this.
 	// The `GetSource()` method returns where the error was born - you can set this with the builder `WithSource()` method. Then as the error bubbles
 	// up, each hop can use the `AddCallerToCallStack()` method. This is how call stack is building up - what you can retrieve with this method.
@@ -389,6 +394,14 @@ func (fault *defaultFault) AddCallerToCallStack(caller ...string) {
 
 func (fault *defaultFault) IsRetryable() bool {
 	return fault.Retryable
+}
+
+func (fault *defaultFault) GetLabel(key string) (value any, found bool) {
+	if fault.Labels == nil || key == "" {
+		return
+	}
+	value, found = fault.Labels[key]
+	return
 }
 
 func (fault *defaultFault) GetLabels() map[string]any {

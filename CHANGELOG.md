@@ -6,6 +6,13 @@ We will mark these with Git Tags
 
 # Changes in releases
 
+## release 1.3.2
+
+Fixes:
+
+- Oops forgot to add `fault.GetLabel()` method. Without this people need to invoke `fault.GetLabels()` and query a full copy - not optimal...
+  So now this method is available.
+
 ## release 1.3.1
 
 Fixes:
