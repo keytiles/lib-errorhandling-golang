@@ -56,6 +56,10 @@ const (
 	ILLEGALSTATE_ERRCODE_TIMED_OUT = "timed_out"
 	// Something has reached its limits - no more is possible
 	ILLEGALSTATE_ERRCODE_EXHAUSTED = "exhausted"
+	// We tried to serialize something into JSON/Yaml/binary etc but it failed. This often can indicate a problem with the original input.
+	ILLEGALSTATE_ERRCODE_SERIALIZATION_FAILED = "serialization_failed"
+	// We tried to deserialize something from JSON/Yaml/binary etc but it failed. This often can indicate a problem with the original input.
+	ILLEGALSTATE_ERRCODE_DESERIALIZATION_FAILED = "deserialization_failed"
 	// You can use this if you think this error only possible if we clearly have a bug in the code.
 	// Time to time happens you find yourself in an error handling case you know "this is impossible" if I find myself here.
 	ILLEGALSTATE_ERRCODE_CODE_BUG = "code_bug"

@@ -6,6 +6,12 @@ We will mark these with Git Tags
 
 # Changes in releases
 
+## release 1.3.3
+
+Fixes:
+
+- Forgot to add two important build in IllegalState error code which often happens: `ILLEGALSTATE_ERRCODE_SERIALIZATION_FAILED` and `ILLEGALSTATE_ERRCODE_DESERIALIZATION_FAILED`
+
 ## release 1.3.2
 
 Fixes:
