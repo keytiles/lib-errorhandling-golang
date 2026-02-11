@@ -132,8 +132,13 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 //
 // Note: there is an alias for this method as `fault.GetGrpcStatusCode()` - if you prefer that style more.
 func GetGrpcStatusCodeForFault(fault Fault) (grpcStatus codes.Code) {
+	if fault == nil {
+		grpcStatus = codes.OK
+		return
+	}
+
 	grpcStatus = codes.Internal
-	if fault == nil || !fault.IsPublic() {
+	if !fault.IsPublic() {
 		return
 	}
 
@@ -177,8 +182,13 @@ func GetGrpcStatusCodeForFault(fault Fault) (grpcStatus codes.Code) {
 //
 // Note: there is an alias for this method as `fault.GetHttpStatusCode()` - if you prefer that style more.
 func GetHttpStatusCodeForFault(fault Fault) (httpStatus int) {
+	if fault == nil {
+		httpStatus = 200
+		return
+	}
+
 	httpStatus = 500
-	if fault == nil || !fault.IsPublic() {
+	if !fault.IsPublic() {
 		return
 	}
 

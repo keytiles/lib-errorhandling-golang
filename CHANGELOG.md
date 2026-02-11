@@ -4,6 +4,13 @@ We are following [Semantic versioning](https://semver.org/) in this library
 
 We will mark these with Git Tags
 
+## release 1.3.4
+
+Fixes:
+
+- `kt_errors.GetGrpcStatusCodeForFault` and `kt_errors.GetHttpStatusCodeForFault` did not classify correctly (=OK) if passed Fault parameter was nil. Now it is fixed.
+  And also more test cases added to verify behavior of these functions.
+
 # Changes in releases
 
 ## release 1.3.3
