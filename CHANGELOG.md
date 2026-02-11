@@ -4,6 +4,12 @@ We are following [Semantic versioning](https://semver.org/) in this library
 
 We will mark these with Git Tags
 
+## release 1.3.5
+
+Fixes:
+
+- Making default `Fault` implementation Nil pointer safe - until this time it would have paniced if one tried to invoke any method on a Nil Fault instance
+
 ## release 1.3.4
 
 Fixes:

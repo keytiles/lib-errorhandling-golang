@@ -311,33 +311,42 @@ type defaultFault struct {
 }
 
 func (fault *defaultFault) GetKind() FaultKind {
+	if fault == nil {
+		return ""
+	}
 	return fault.Kind
 }
 
 func (fault *defaultFault) GetMessageTemplate() string {
+	if fault == nil {
+		return ""
+	}
 	return fault.MessageTemplate
 }
 
 func (fault *defaultFault) GetMessage() string {
+	if fault == nil {
+		return ""
+	}
 	return kt_utils.StringSimpleResolve(fault.MessageTemplate, fault.Labels)
 }
 
 func (fault *defaultFault) GetMessageTemplateForAudience(forAudience string) string {
-	if fault.MessageTemplatesByAudience == nil {
+	if fault == nil || fault.MessageTemplatesByAudience == nil {
 		return ""
 	}
 	return fault.MessageTemplatesByAudience[forAudience]
 }
 
 func (fault *defaultFault) GetMessageForAudience(forAudience string) string {
-	if fault.MessageTemplatesByAudience == nil {
+	if fault == nil || fault.MessageTemplatesByAudience == nil {
 		return ""
 	}
 	return kt_utils.StringSimpleResolve(fault.GetMessageTemplateForAudience(forAudience), fault.Labels)
 }
 
 func (fault *defaultFault) GetMessageTemplatesByAudience() map[string]string {
-	if fault.MessageTemplatesByAudience == nil {
+	if fault == nil || fault.MessageTemplatesByAudience == nil {
 		return make(map[string]string)
 	}
 	// we return a copy only
@@ -347,11 +356,14 @@ func (fault *defaultFault) GetMessageTemplatesByAudience() map[string]string {
 }
 
 func (fault *defaultFault) IsPublic() bool {
+	if fault == nil {
+		return false
+	}
 	return fault.public
 }
 
 func (fault *defaultFault) GetErrorCodes() []string {
-	if fault.ErrorCodes == nil {
+	if fault == nil || fault.ErrorCodes == nil {
 		// we return empty
 		return make([]string, 0)
 	}
@@ -362,7 +374,7 @@ func (fault *defaultFault) GetErrorCodes() []string {
 }
 
 func (fault *defaultFault) HasErrorCode(codes ...string) bool {
-	if fault.ErrorCodes == nil {
+	if fault == nil || fault.ErrorCodes == nil {
 		return false
 	}
 	for _, code := range codes {
@@ -374,10 +386,16 @@ func (fault *defaultFault) HasErrorCode(codes ...string) bool {
 }
 
 func (fault *defaultFault) GetCause() error {
+	if fault == nil {
+		return nil
+	}
 	return fault.cause
 }
 
 func (fault *defaultFault) GetSource() string {
+	if fault == nil {
+		return ""
+	}
 	if len(fault.callStack) > 0 {
 		return fault.callStack[0]
 	}
@@ -385,6 +403,9 @@ func (fault *defaultFault) GetSource() string {
 }
 
 func (fault *defaultFault) GetCallStack() []string {
+	if fault == nil {
+		return make([]string, 0)
+	}
 	// we return a copy
 	ret := make([]string, len(fault.callStack))
 	copy(ret, fault.callStack)
@@ -393,15 +414,21 @@ func (fault *defaultFault) GetCallStack() []string {
 }
 
 func (fault *defaultFault) AddCallerToCallStack(caller ...string) {
+	if fault == nil {
+		return
+	}
 	fault.callStack = append(fault.callStack, strings.Join(caller, "."))
 }
 
 func (fault *defaultFault) IsRetryable() bool {
+	if fault == nil {
+		return false
+	}
 	return fault.Retryable
 }
 
 func (fault *defaultFault) GetLabel(key string) (value any, found bool) {
-	if fault.Labels == nil || key == "" {
+	if fault == nil || fault.Labels == nil || key == "" {
 		return
 	}
 	value, found = fault.Labels[key]
@@ -409,7 +436,7 @@ func (fault *defaultFault) GetLabel(key string) (value any, found bool) {
 }
 
 func (fault *defaultFault) GetLabels() map[string]any {
-	if fault.Labels == nil {
+	if fault == nil || fault.Labels == nil {
 		// we return empty map
 		return make(map[string]any)
 	}
@@ -420,6 +447,9 @@ func (fault *defaultFault) GetLabels() map[string]any {
 }
 
 func (fault *defaultFault) AddContextToMessage(contextMsgTemplate string) {
+	if fault == nil {
+		return
+	}
 	if contextMsgTemplate != "" {
 		// we prepend to the message
 		fault.MessageTemplate = contextMsgTemplate + fault.MessageTemplate
@@ -427,6 +457,9 @@ func (fault *defaultFault) AddContextToMessage(contextMsgTemplate string) {
 }
 
 func (fault *defaultFault) AddContextToAudienceMessage(forAudience string, contextMsgTemplate string) {
+	if fault == nil {
+		return
+	}
 	if contextMsgTemplate != "" && forAudience != "" {
 		_trimmed := ""
 		msg, found := fault.MessageTemplatesByAudience[forAudience]
@@ -447,6 +480,9 @@ func (fault *defaultFault) AddContextToAudienceMessage(forAudience string, conte
 }
 
 func (fault *defaultFault) AddErrorCodes(c ...string) {
+	if fault == nil {
+		return
+	}
 	if fault.ErrorCodes == nil {
 		fault.ErrorCodes = make([]string, 0, len(c))
 	}
@@ -458,6 +494,9 @@ func (fault *defaultFault) AddErrorCodes(c ...string) {
 }
 
 func (fault *defaultFault) AddLabel(key string, value any) {
+	if fault == nil {
+		return
+	}
 	if key != "" {
 		// lets lazy-create map if not created yet
 		if fault.Labels == nil {
@@ -468,7 +507,7 @@ func (fault *defaultFault) AddLabel(key string, value any) {
 }
 
 func (fault *defaultFault) AddLabels(labels map[string]any) {
-	if labels == nil {
+	if fault == nil || labels == nil {
 		return
 	}
 	// lets lazy-create map if not created yet
