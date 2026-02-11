@@ -4,6 +4,12 @@ We are following [Semantic versioning](https://semver.org/) in this library
 
 We will mark these with Git Tags
 
+## release 1.3.8
+
+Fixes:
+
+- Forgot to add `kt_errors.AUTHENTICATION_ERRCODE_INVALID` error code - now added.
+
 ## release 1.3.7
 
 Fixes:

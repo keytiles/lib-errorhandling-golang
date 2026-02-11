@@ -90,6 +90,8 @@ const (
 
 	// Use this if you expected to have an authentication at certain point but it is not there
 	AUTHENTICATION_ERRCODE_MISSING = "auth_data_missing"
+	// Use this if you however authentication data is there but it is clearly invalid - e.g. password was empty
+	AUTHENTICATION_ERRCODE_INVALID = "auth_data_invalid"
 	// Use this if however auth info was there but it is using a method which you do not support
 	AUTHENTICATION_ERRCODE_NOT_SUPPORTED = "auth_method_not_supported"
 	// Might make sense in situations like JWT tokens - data is valid but token is expired
