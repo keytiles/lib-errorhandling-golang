@@ -4,7 +4,7 @@ We are following [Semantic versioning](https://semver.org/) in this library
 
 We will mark these with Git Tags
 
-## release 1.3.5
+## release 1.3.6
 
 Fixes:
 
