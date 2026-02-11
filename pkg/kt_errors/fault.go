@@ -92,6 +92,8 @@ const (
 	AUTHENTICATION_ERRCODE_MISSING = "auth_data_missing"
 	// Use this if however auth info was there but it is using a method which you do not support
 	AUTHENTICATION_ERRCODE_NOT_SUPPORTED = "auth_method_not_supported"
+	// Might make sense in situations like JWT tokens - data is valid but token is expired
+	AUTHENTICATION_ERRCODE_EXPIRED = "auth_data_expired"
 	// Use this if however auth info was there auth process was not successful
 	AUTHENTICATION_ERRCODE_FAILED = "authentication_failed"
 

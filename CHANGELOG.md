@@ -4,11 +4,21 @@ We are following [Semantic versioning](https://semver.org/) in this library
 
 We will mark these with Git Tags
 
+## release 1.3.7
+
+Fixes:
+
+- Forgot to add `kt_errors.AUTHENTICATION_ERRCODE_EXPIRED` error code - now added.
+
 ## release 1.3.6
 
 Fixes:
 
 - Making default `Fault` implementation Nil pointer safe - until this time it would have paniced if one tried to invoke any method on a Nil Fault instance
+
+## release 1.3.5
+
+Skipped - we made a git tag error and not possible to fix in place
 
 ## release 1.3.4
 
