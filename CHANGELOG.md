@@ -4,6 +4,12 @@ We are following [Semantic versioning](https://semver.org/) in this library
 
 We will mark these with Git Tags
 
+## release 2.0.1
+
+Fixes:
+
+- Making `kt_errors.conversionOption` iface public so renamed to `kt_errors.ConversionOption` - this is necessary so other libs can create wrappers around the conversion.
+
 ## release 2.0.0
 
 Breaking changes:

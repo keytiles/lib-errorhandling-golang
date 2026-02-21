@@ -25,8 +25,8 @@ const (
 	whitelistedKindsOption int = 2
 )
 
-// Internal iface. Can be used as possible option passed into the conversion.
-type conversionOption interface {
+// Can be used as possible option passed into the conversion. Please see methods `OptionXXX()` for supported options!
+type ConversionOption interface {
 	getOptionId() int
 	getLogLabels() []kt_logging.Label
 	getKinds() []FaultKind
@@ -72,7 +72,7 @@ func (o optionWhiteListedKinds) getFlag() bool {
 // You can pass in labels with this option which will decorate the log event.
 //
 // But **please note:** if you passed in `transactionId` then it is always added to the log labels. So only for this you do not need to bother with it.
-func OptionLogLabels(labels []kt_logging.Label) conversionOption {
+func OptionLogLabels(labels []kt_logging.Label) ConversionOption {
 	return optionLogLabels{
 		logLabels: labels,
 	}
@@ -84,7 +84,7 @@ func OptionLogLabels(labels []kt_logging.Label) conversionOption {
 // With this option you can specify a set of `FaultKind`s to safely inherit.
 // In this case the `ERRCODE_INTERNAL_ERROR` is not added if the kind of the original Fault was whitelisted. (As the whitelist itself already suggests a special
 // scenario.)
-func OptionWhitelistedFaultKinds(inheritErrorCodes bool, kinds ...FaultKind) conversionOption {
+func OptionWhitelistedFaultKinds(inheritErrorCodes bool, kinds ...FaultKind) ConversionOption {
 	return optionWhiteListedKinds{
 		kinds:             kinds,
 		inheritErrorCodes: inheritErrorCodes,
@@ -116,7 +116,7 @@ func OptionWhitelistedFaultKinds(inheritErrorCodes bool, kinds ...FaultKind) con
 //   - 'loggerToUse': This logger is used to log the original fault so we have it, because the converted fault will very likely remove MANY specific
 //     details. In case no logger provided then a default Logger will be used for this.
 //   - 'options': You can pass in options to the conversion to fine grain how it behaves - please check `kt_errors.OptionXXX()` methods to see possibilities!
-func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUse *kt_logging.Logger, options ...conversionOption) Fault {
+func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUse *kt_logging.Logger, options ...ConversionOption) Fault {
 	if original == nil {
 		return nil
 	}
