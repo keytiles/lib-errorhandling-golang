@@ -8,10 +8,6 @@ import (
 	"google.golang.org/grpc/codes"
 )
 
-var (
-	NO_LOG_LABELS []kt_logging.Label = []kt_logging.Label{}
-)
-
 // Tests the given error if this is a `Fault` or not. If yes then returns true and the converted Fault.
 // If not then returns false and nil. If the provided error is nil, then it is NOT a Fault by default.
 func IsFault(err error) (bool, Fault) {
@@ -24,6 +20,77 @@ func IsFault(err error) (bool, Fault) {
 	return false, nil
 }
 
+const (
+	logLabelsOption        int = 1
+	whitelistedKindsOption int = 2
+)
+
+// Internal iface. Can be used as possible option passed into the conversion.
+type conversionOption interface {
+	getOptionId() int
+	getLogLabels() []kt_logging.Label
+	getKinds() []FaultKind
+	getFlag() bool
+}
+
+// Conversion option to carry extra log labels.
+type optionLogLabels struct {
+	logLabels []kt_logging.Label
+}
+
+func (o optionLogLabels) getOptionId() int {
+	return logLabelsOption
+}
+func (o optionLogLabels) getLogLabels() []kt_logging.Label {
+	return o.logLabels
+}
+func (o optionLogLabels) getKinds() []FaultKind {
+	return nil
+}
+func (o optionLogLabels) getFlag() bool {
+	return false
+}
+
+type optionWhiteListedKinds struct {
+	kinds             []FaultKind
+	inheritErrorCodes bool
+}
+
+func (o optionWhiteListedKinds) getOptionId() int {
+	return whitelistedKindsOption
+}
+func (o optionWhiteListedKinds) getLogLabels() []kt_logging.Label {
+	return nil
+}
+func (o optionWhiteListedKinds) getKinds() []FaultKind {
+	return o.kinds
+}
+func (o optionWhiteListedKinds) getFlag() bool {
+	return o.inheritErrorCodes
+}
+
+// You can pass in labels with this option which will decorate the log event.
+//
+// But **please note:** if you passed in `transactionId` then it is always added to the log labels. So only for this you do not need to bother with it.
+func OptionLogLabels(labels []kt_logging.Label) conversionOption {
+	return optionLogLabels{
+		logLabels: labels,
+	}
+}
+
+// When conversion is made from non-public `Fault` then by default the kind of the converted `Fault` is always `RuntimeFault`. However it is often practical to
+// allow a few specific kinds of the `Fault` to be inherited as kind into the public `Fault` during the conversion - instead of hiding those kinds entirely.
+//
+// With this option you can specify a set of `FaultKind`s to safely inherit.
+// In this case the `ERRCODE_INTERNAL_ERROR` is not added if the kind of the original Fault was whitelisted. (As the whitelist itself already suggests a special
+// scenario.)
+func OptionWhitelistedFaultKinds(inheritErrorCodes bool, kinds ...FaultKind) conversionOption {
+	return optionWhiteListedKinds{
+		kinds:             kinds,
+		inheritErrorCodes: inheritErrorCodes,
+	}
+}
+
 // Turns any error into a public Fault instance.
 //
 // In case the error is already isPublic=true `Fault` then it is returned as it is. Piece of cake :-)
@@ -32,41 +99,65 @@ func IsFault(err error) (bool, Fault) {
 // implementation details (e.g. we use S3 buckets which failed - the message can reveal this fact we use S3 buckets - not good)
 //
 // Therefore what happens is that
-//   - The method will log the original error.
+//   - The method will log the original error. (This is why we need a `loggerToUse` param - see below)
 //   - Then construct an isPublic=true `Fault` with generic safe message like "something has happened - details in the log".
-//   - Adds error code `ERRCODE_INTERNAL_ERROR`.
+//   - Adds error code `ERRCODE_INTERNAL_ERROR`. (If you used `OptionWhitelistedFaultKinds()` that can fine grain this - see description!)
 //   - Sets the `cause` of the error to the original error.
 //
 // In case the original error is isPublic=false `Fault` then we can keep some data from the original error for sure - but with care!
-// The message of the error is still considered unsafe. But if it carries message for audience `MSGAUDIENCE_USER` then that one turns into
-// the main message of the converted public error. All labels removed but the ones used in any `messageTemplatesByAudience`. Retry behavior
-// is inherited. And original error codes are also removed. They can potentially again leak out internal implementation details.
+// Retry behavior is alwqys inherited. However the message of the error is still considered unsafe. But if it carries message for audience `MSGAUDIENCE_USER`
+// then that one turns into the main message of the converted public error. All labels removed but the ones used in any `messageTemplatesByAudience`. And
+// original error codes are also removed. They can potentially again leak out internal implementation details.
 //
 // Arguments:
 //   - 'original': The error you want to turn into a public `Fault`.
 //   - 'transactionId': If you have a transaction ID pass it here! Then it will appear in the log as label, added to the Fault as "transactionId" label
 //     and also might appear in converted error message. Otherwise pass empty string simply.
-//   - 'loggerToUse': This logger is used to log the original exception so we have it, because the converted error message will not give ANY specific
-//     details back. In case no logger provided then a default Logger will be used for this.
-//   - 'logLabels': You can pass in labels here which will decorate the log event - or if you dont have / want, you can simply pass in the constant
-//     `kt_errors.NO_LOG_LABELS`. **Please note:** if you passed in `transactionId` then it is always added to
-//     the log labels! So only for this you have nothing to do here, you can keep this empty.
-func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUse *kt_logging.Logger, logLabels []kt_logging.Label) Fault {
+//   - 'loggerToUse': This logger is used to log the original fault so we have it, because the converted fault will very likely remove MANY specific
+//     details. In case no logger provided then a default Logger will be used for this.
+//   - 'options': You can pass in options to the conversion to fine grain how it behaves - please check `kt_errors.OptionXXX()` methods to see possibilities!
+func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUse *kt_logging.Logger, options ...conversionOption) Fault {
 	if original == nil {
 		return nil
 	}
-	isFault, Fault := IsFault(original)
+	isFault, fault := IsFault(original)
 	if isFault {
 		// so the original error is at least a Fault - good!
-		if Fault.IsPublic() {
+		if fault.IsPublic() {
 			// this is easy - as this is already a public error
-			return Fault
+			return fault
 		}
 	}
 
-	builder := NewPublicFaultBuilder(RuntimeFault).
-		WithErrorCodes(ERRCODE_INTERNAL_ERROR).
+	var logLabels []kt_logging.Label
+	var safeKinds []FaultKind
+	kindWasKept := false
+	inheritErrorCodes := false
+	for _, opt := range options {
+		if opt.getOptionId() == logLabelsOption {
+			logLabels = opt.getLogLabels()
+		} else if opt.getOptionId() == whitelistedKindsOption {
+			safeKinds = opt.getKinds()
+			inheritErrorCodes = opt.getFlag()
+		}
+	}
+
+	kind := RuntimeFault
+	if isFault && slices.Contains(safeKinds, fault.GetKind()) {
+		kind = fault.GetKind()
+		kindWasKept = true
+	}
+	builder := NewPublicFaultBuilder(kind).
 		WithCause(original)
+
+	// If we did not keep the original kind mark it as INTERNAL error
+	if !kindWasKept {
+		builder.WithErrorCodes(ERRCODE_INTERNAL_ERROR)
+	}
+	if inheritErrorCodes {
+		builder.WithErrorCodes(fault.GetErrorCodes()...)
+	}
+
 	// let's set a default message
 	if transactionId != "" {
 		builder.WithMessageTemplate("Error occured during processing, details are logged with transactionId '{transactionId}'").
@@ -81,6 +172,7 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 		logger = getDefaultLogger()
 	}
 	logEvent := logger.WithLabels(logLabels)
+
 	// is transactionId in labels?
 	if transactionId != "" && !slices.ContainsFunc(logLabels, func(item kt_logging.Label) bool { return item.GetStringValue() == transactionId }) {
 		// let's enforce we will really decorate the log event with the transaction id!
@@ -89,12 +181,12 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 	if isFault {
 		logEvent.
 			Warn(
-				"Unsafe error captured which we turn into a public Fault - hiding unsafe details. Orig error was: %s",
-				kt_utils.VarPrinter{TheVar: Fault},
+				"Unsafe error captured which we turn into a public Fault (kindKept: %t, inheritErrorCodes: %t) - hiding unsafe details. Orig error was: %s",
+				kindWasKept, inheritErrorCodes, kt_utils.VarPrinter{TheVar: fault},
 			)
 		// we can inherit the retry calssification for sure
-		builder.WithIsRetryable(Fault.IsRetryable())
-		audienceMsgTemplates := Fault.GetMessageTemplatesByAudience()
+		builder.WithIsRetryable(fault.IsRetryable())
+		audienceMsgTemplates := fault.GetMessageTemplatesByAudience()
 		userMsgTemplate := audienceMsgTemplates[MSGAUDIENCE_USER]
 		if len(userMsgTemplate) > 0 {
 			// the error has a user facing message - let's use this as error message!
@@ -111,7 +203,7 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 		for _, audienceMsgTemplate := range audienceMsgTemplates {
 			neededVariables.Union(kt_utils.StringExtractVariableNames(audienceMsgTemplate))
 		}
-		for key, value := range Fault.GetLabels() {
+		for key, value := range fault.GetLabels() {
 			if neededVariables.Contains(key) {
 				builder.WithLabel(key, value)
 			}

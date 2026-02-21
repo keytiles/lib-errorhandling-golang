@@ -4,6 +4,14 @@ We are following [Semantic versioning](https://semver.org/) in this library
 
 We will mark these with Git Tags
 
+## release 2.0.0
+
+Breaking changes:
+
+- Changed the signature of utility function `kt_errors.NewPublicFaultFromAnyError()`. From now it is much more convenient to fine tune a bit how the conversion
+  works using the `options` parameter. We introduced a few non-mandatory but super useful options - see `kt_errors.OptionXXX()` methods!
+- Because of the above we do not need the `kt_errors.NO_LOG_LABELS` constant anymore - so it was removed.
+
 ## release 1.3.8
 
 Fixes:

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/keytiles/lib-errorhandling-golang/pkg/kt_errors"
+	"github.com/keytiles/lib-errorhandling-golang/v2/pkg/kt_errors"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc/codes"
 )

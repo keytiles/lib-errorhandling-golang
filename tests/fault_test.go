@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/keytiles/lib-errorhandling-golang/pkg/kt_errors"
+	"github.com/keytiles/lib-errorhandling-golang/v2/pkg/kt_errors"
+	"github.com/keytiles/lib-logging-golang/v2/pkg/kt_logging"
 	"github.com/keytiles/lib-utils-golang/pkg/kt_utils"
 	"github.com/stretchr/testify/assert"
 )
@@ -228,7 +229,7 @@ func TestPublicFaultCreation_fromPublicFault(t *testing.T) {
 		Build()
 
 	// ---- WHEN
-	converted := kt_errors.NewPublicFaultFromAnyError(originalErr, "trId", nil, kt_errors.NO_LOG_LABELS)
+	converted := kt_errors.NewPublicFaultFromAnyError(originalErr, "trId", nil)
 
 	// ---- THEN
 	// since original error was already public, it is returned as it is
@@ -253,7 +254,14 @@ func TestPublicFaultCreation_fromNonPublicFaultError(t *testing.T) {
 		Build()
 
 	// ---- WHEN
-	converted := kt_errors.NewPublicFaultFromAnyError(originalFault, "trId", nil, kt_errors.NO_LOG_LABELS)
+	converted := kt_errors.NewPublicFaultFromAnyError(
+		originalFault,
+		"trId",
+		nil,
+		kt_errors.OptionLogLabels(
+			[]kt_logging.Label{kt_logging.StringLabel("buuu", "baaa")},
+		), // with this we just make sure opt works - but can not auto test it if it really made into the log... :-(
+	)
 
 	// ---- THEN
 	// what we got is public
@@ -294,7 +302,7 @@ func TestPublicFaultCreation_fromNonPublicFaultError(t *testing.T) {
 		Build()
 
 	// ---- WHEN
-	converted = kt_errors.NewPublicFaultFromAnyError(originalFault, "trId", nil, kt_errors.NO_LOG_LABELS)
+	converted = kt_errors.NewPublicFaultFromAnyError(originalFault, "trId", nil)
 
 	// ---- THEN
 	// what we got is public
@@ -318,8 +326,7 @@ func TestPublicFaultCreation_fromNonPublicFaultError(t *testing.T) {
 	// ===============================
 	// Scenario 3
 	// ===============================
-	// The Fault contains some audience AND also contains "user" facing
-	// That
+	// The Fault contains some audience AND also contains "user" facing msg.
 
 	// ---- GIVEN
 	cause = fmt.Errorf("cause error")
@@ -336,7 +343,7 @@ func TestPublicFaultCreation_fromNonPublicFaultError(t *testing.T) {
 		Build()
 
 	// ---- WHEN
-	converted = kt_errors.NewPublicFaultFromAnyError(originalFault, "trId", nil, kt_errors.NO_LOG_LABELS)
+	converted = kt_errors.NewPublicFaultFromAnyError(originalFault, "trId", nil)
 
 	// ---- THEN
 	// what we got is public
@@ -357,6 +364,85 @@ func TestPublicFaultCreation_fromNonPublicFaultError(t *testing.T) {
 	// and we kept all labels needed to resolve audience messages + the "transactionId"
 	assert.Equal(t, map[string]any{"var1": "value1", "var3": "value3", "transactionId": "trId"}, converted.GetLabels())
 
+	// ===============================
+	// Scenario 4
+	// ===============================
+	// Let's test the OptionWhitelistedFaultKinds feature!
+
+	// ---- GIVEN
+	cause = fmt.Errorf("cause error")
+	originalFault = kt_errors.NewFaultBuilder(kt_errors.AuthorizationFault).
+		WithMessageTemplate("message with var={var1} and unknown {unknown_var}").
+		WithMessageTemplateForAudience(kt_errors.MSGAUDIENCE_USER, "user facing message with {var1}").
+		WithMessageTemplateForAudience("audience1", "message with {var3}").
+		WithIsRetryable(true).
+		WithErrorCodes(kt_errors.AUTHENTICATION_ERRCODE_INVALID, "some_other_error").
+		WithLabel("var1", "value1").
+		WithLabel("var2", "value2").
+		WithLabel("var3", "value3").
+		WithCause(cause).
+		Build()
+
+	// ---- WHEN
+	inheritErrCodes := true
+	converted = kt_errors.NewPublicFaultFromAnyError(
+		originalFault, "trId", nil,
+		kt_errors.OptionWhitelistedFaultKinds(inheritErrCodes, kt_errors.AuthenticationFault, kt_errors.AuthorizationFault),
+	)
+
+	// ---- THEN
+	// what we got is public
+	assert.True(t, converted.IsPublic())
+	// the original error is added as a cause - as it is
+	assert.Equal(t, originalFault, converted.GetCause())
+	// the type now kept
+	assert.Equal(t, originalFault.GetKind(), converted.GetKind())
+	// error codes removed - but marked as internal error
+	assert.Equal(t, 2, len(converted.GetErrorCodes()))
+	assert.True(t, converted.HasErrorCode(kt_errors.AUTHENTICATION_ERRCODE_INVALID))
+	assert.True(t, converted.HasErrorCode("some_other_error"))
+	// "isRetryable" inherited
+	assert.True(t, converted.IsRetryable())
+	// the message should be inherited from MSGAUDIENCE_USER audience template
+	assert.Equal(t, "user facing message with {var1}", converted.GetMessageTemplate())
+	// Only one audience message remains
+	assert.Equal(t, map[string]string{"audience1": "message with {var3}"}, converted.GetMessageTemplatesByAudience())
+	// and we kept all labels needed to resolve audience messages + the "transactionId"
+	assert.Equal(t, map[string]any{"var1": "value1", "var3": "value3", "transactionId": "trId"}, converted.GetLabels())
+
+	// ---- GIVEN
+
+	// let's test a non-white listed stuff - it should behave as usual
+	originalFault = kt_errors.NewFaultBuilder(kt_errors.IllegalStateFault).
+		WithMessageTemplate("message with var={var1} and unknown {unknown_var}").
+		WithMessageTemplateForAudience(kt_errors.MSGAUDIENCE_USER, "user facing message with {var1}").
+		WithErrorCodes(kt_errors.AUTHENTICATION_ERRCODE_INVALID, "some_other_error").
+		WithLabel("var1", "value1").
+		WithLabel("var2", "value2").
+		WithLabel("var3", "value3").
+		WithCause(cause).
+		Build()
+
+	// ---- WHEN
+	converted = kt_errors.NewPublicFaultFromAnyError(originalFault, "trId", nil)
+
+	// ---- THEN
+	// what we got is public
+	assert.True(t, converted.IsPublic())
+	// the original error is added as a cause - as it is
+	assert.Equal(t, originalFault, converted.GetCause())
+	// the type is always RuntimeError
+	assert.Equal(t, kt_errors.RuntimeFault, converted.GetKind())
+	// error codes removed - but marked as internal error
+	assert.Equal(t, 1, len(converted.GetErrorCodes()))
+	assert.True(t, converted.HasErrorCode(kt_errors.ERRCODE_INTERNAL_ERROR))
+	// the message should be inherited from MSGAUDIENCE_USER audience template
+	assert.Equal(t, "user facing message with {var1}", converted.GetMessageTemplate())
+	// No audience message remains
+	assert.Equal(t, 0, len(converted.GetMessageTemplatesByAudience()))
+	// and we kept all labels needed to resolve audience messages + the "transactionId"
+	assert.Equal(t, map[string]any{"var1": "value1", "transactionId": "trId"}, converted.GetLabels())
+
 }
 
 func TestToString_causeIsAnotherFault(t *testing.T) {
@@ -372,7 +458,7 @@ func TestToString_causeIsAnotherFault(t *testing.T) {
 		WithSource("mymodule", "myfunction").
 		Build()
 	// and convert it into a public one - this will set the 'cause' to the original
-	converted := kt_errors.NewPublicFaultFromAnyError(originalFault, "trId", nil, kt_errors.NO_LOG_LABELS)
+	converted := kt_errors.NewPublicFaultFromAnyError(originalFault, "trId", nil)
 
 	// ---- WHEN
 	tostring_result := converted.String()
