@@ -69,7 +69,7 @@ const (
 	// Use this error code if you expected a sepcific format for something but you received something else instead
 	VALIDATION_ERRCODE_WRONG_FORMAT = "wrong_format"
 	// Use this error code if you expected a mandatory parameter but was not provided
-	VALIDATION_ERRCODE_MISSING_MANDATORY = "mandatoy_info_missing"
+	VALIDATION_ERRCODE_MISSING_MANDATORY = "mandatory_info_missing"
 	// Use this error code if somewhere you expected to get nothing (e.g. a field should be None) but you got something
 	VALIDATION_ERRCODE_SHOULD_NOT_BE_PROVIDED = "should_not_be_provided"
 	// Use this error code if however data was provided it is not valid - content wise
@@ -463,6 +463,9 @@ func (fault *defaultFault) AddContextToMessage(contextMsgTemplate string) {
 func (fault *defaultFault) AddContextToAudienceMessage(forAudience string, contextMsgTemplate string) {
 	if fault == nil {
 		return
+	}
+	if fault.MessageTemplatesByAudience == nil {
+		fault.MessageTemplatesByAudience = make(map[string]string)
 	}
 	if contextMsgTemplate != "" && forAudience != "" {
 		_trimmed := ""

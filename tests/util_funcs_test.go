@@ -128,3 +128,19 @@ func TestGrpcStatusCodeFromFault(t *testing.T) {
 	}
 
 }
+
+func TestGetFaultAsNaturalJSON_NilFaultIsSafe(t *testing.T) {
+	var fault kt_errors.Fault = nil
+
+	json, err := kt_errors.GetFaultAsNaturalJSON(fault, "")
+	assert.NoError(t, err)
+	assert.Equal(t, `{"kind":"NaN","message":"","isRetryable":false,"errorCodes":[],"labels":{}}`, string(json))
+}
+
+func TestGetFaultAsFullJSON_NilFaultIsSafe(t *testing.T) {
+	var fault kt_errors.Fault = nil
+
+	json, err := kt_errors.GetFaultAsFullJSON(fault)
+	assert.NoError(t, err)
+	assert.Equal(t, `{"kind":"NaN","message":"","messagesByAudience":{},"isRetryable":false,"errorCodes":[],"labels":{}}`, string(json))
+}

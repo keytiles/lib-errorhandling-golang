@@ -4,6 +4,13 @@ We are following [Semantic versioning](https://semver.org/) in this library
 
 We will mark these with Git Tags
 
+## release 2.0.2
+
+Fixes:
+
+- `VALIDATION_ERRCODE_MISSING_MANDATORY` value was wrong - now it is correct
+- Nil safety fixes
+
 ## release 2.0.1
 
 Fixes:

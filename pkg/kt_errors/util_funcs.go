@@ -329,12 +329,20 @@ func GetHttpStatusCodeForFault(fault Fault) (httpStatus int) {
 // Alias over the Fault's member function `fault.ToNaturalJSON()` - see description there!
 // You can also use the member function if you prefer that style more in your code.
 func GetFaultAsNaturalJSON(fault Fault, forAudience string, options ...SerializationOption) ([]byte, error) {
+	if fault == nil {
+		var f *defaultFault
+		return f.ToNaturalJSON(forAudience, options...)
+	}
 	return fault.ToNaturalJSON(forAudience, options...)
 }
 
 // Alias over the Fault's member function `fault.ToFullJSON()` - see description there!
 // You can also use the member function if you prefer that style more in your code.
 func GetFaultAsFullJSON(fault Fault, options ...SerializationOption) ([]byte, error) {
+	if fault == nil {
+		var f *defaultFault
+		return f.ToFullJSON(options...)
+	}
 	return fault.ToFullJSON(options...)
 }
 
