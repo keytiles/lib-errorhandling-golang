@@ -6,7 +6,7 @@ import (
 
 	"github.com/keytiles/lib-errorhandling-golang/v2/pkg/kt_errors"
 	"github.com/keytiles/lib-logging-golang/v2/pkg/kt_logging"
-	"github.com/keytiles/lib-utils-golang/pkg/kt_utils"
+	"github.com/keytiles/lib-utils-golang/v2/pkg/kt_utils"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -4,7 +4,7 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/keytiles/lib-sets-golang/ktsets"
+	"github.com/keytiles/lib-sets-golang/v2/pkg/kt_sets"
 )
 
 // Creates a new FaultBuilder for "public" errors and you can convenient way fine tune the error before you invoke `Build()` method on it.
@@ -12,7 +12,7 @@ import (
 func NewPublicFaultBuilder(errType FaultKind) *FaultBuilder {
 	err := newInitializedFault(errType)
 	err.public = true
-	return &FaultBuilder{fault: err, errCodes: ktsets.NewSet[string]()}
+	return &FaultBuilder{fault: err, errCodes: kt_sets.NewSet[string]()}
 }
 
 // Creates a new FaultBuilder marked "non public" and you can convenient way fine tune the error before you invoke `Build()` method on it.
@@ -20,12 +20,12 @@ func NewPublicFaultBuilder(errType FaultKind) *FaultBuilder {
 func NewFaultBuilder(errType FaultKind) *FaultBuilder {
 	err := newInitializedFault(errType)
 	err.public = false
-	return &FaultBuilder{fault: err, errCodes: ktsets.NewSet[string]()}
+	return &FaultBuilder{fault: err, errCodes: kt_sets.NewSet[string]()}
 }
 
 type FaultBuilder struct {
 	fault    defaultFault
-	errCodes ktsets.Set[string]
+	errCodes *kt_sets.Set[string]
 }
 
 func (builder *FaultBuilder) Build() Fault {
@@ -38,7 +38,7 @@ func (builder *FaultBuilder) Build() Fault {
 
 	// assemble error codes
 	if builder.errCodes.Size() > 0 {
-		_fault.ErrorCodes = builder.errCodes.GetAll()
+		_fault.ErrorCodes = builder.errCodes.AsSlice()
 	}
 
 	// review the isRetryable flag

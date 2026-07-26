@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/keytiles/lib-sets-golang/ktsets"
-	"github.com/keytiles/lib-utils-golang/pkg/kt_utils"
+	"github.com/keytiles/lib-sets-golang/v2/pkg/kt_sets"
+	"github.com/keytiles/lib-utils-golang/v2/pkg/kt_utils"
 	"google.golang.org/grpc/codes"
 )
 
@@ -600,7 +600,7 @@ func (fault *defaultFault) ToNaturalJSON(forAudience string, options ...Serializ
 			natural.Labels = make(map[string]any)
 		}
 
-		var msgVars ktsets.Set[string]
+		var msgVars *kt_sets.Set[string]
 		if forAudience == "" {
 			if resolveMessages {
 				natural.Message = fault.GetMessage()
@@ -621,7 +621,7 @@ func (fault *defaultFault) ToNaturalJSON(forAudience string, options ...Serializ
 			}
 		}
 		if msgVars.Size() > 0 {
-			for _, k := range msgVars.GetAll() {
+			for _, k := range msgVars.AsSlice() {
 				delete(natural.Labels, k)
 			}
 		}
@@ -655,7 +655,7 @@ func (fault *defaultFault) ToFullJSON(options ...SerializationOption) ([]byte, e
 	}
 
 	if resolveMessages {
-		var msgVars ktsets.Set[string]
+		var msgVars *kt_sets.Set[string]
 		_fault.MessageTemplate = fault.GetMessage()
 		if !leaveVars {
 			msgVars = kt_utils.StringExtractVariableNames(fault.MessageTemplate)
@@ -670,7 +670,7 @@ func (fault *defaultFault) ToFullJSON(options ...SerializationOption) ([]byte, e
 		}
 
 		if msgVars.Size() > 0 {
-			for _, k := range msgVars.GetAll() {
+			for _, k := range msgVars.AsSlice() {
 				delete(_fault.Labels, k)
 			}
 		}

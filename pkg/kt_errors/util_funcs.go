@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"github.com/keytiles/lib-logging-golang/v2/pkg/kt_logging"
-	"github.com/keytiles/lib-utils-golang/pkg/kt_utils"
+	"github.com/keytiles/lib-utils-golang/v2/pkg/kt_utils"
 	"google.golang.org/grpc/codes"
 )
 

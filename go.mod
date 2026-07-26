@@ -1,13 +1,11 @@
 module github.com/keytiles/lib-errorhandling-golang/v2
 
-go 1.24.0
-
-toolchain go1.24.12
+go 1.26.0
 
 require (
 	github.com/keytiles/lib-logging-golang/v2 v2.1.0
-	github.com/keytiles/lib-sets-golang v1.2.0
-	github.com/keytiles/lib-utils-golang v1.0.0
+	github.com/keytiles/lib-sets-golang/v2 v2.0.1
+	github.com/keytiles/lib-utils-golang/v2 v2.0.0
 	github.com/stretchr/testify v1.8.4
 	google.golang.org/grpc v1.78.0
 )
