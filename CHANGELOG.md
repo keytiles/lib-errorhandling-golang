@@ -4,6 +4,11 @@ We are following [Semantic versioning](https://semver.org/) in this library
 
 We will mark these with Git Tags
 
+## release 2.0.5
+
+Upgrades:
+- Pulling in github.com/keytiles/lib-logging-golang/v2 v2.1.1 (it does not break consumers we just switch internally -> not breaking change)
+
 ## release 2.0.4
 
 Fixes / Improvements:
