@@ -10,6 +10,10 @@ Fixes / Improvements:
 - Applying Keytiles lib standards
   - Introducing constant `LIB_NAME`
   - Based on the above introducing constants `PACKAGE_NAME` in all packages - used as a prefix for kt_errors.Fault sources and Logging
+- `FaultBuilder.Build()`: auth/authz non-retryable overrides (`AUTHENTICATION_ERRCODE_MISSING` / `NOT_SUPPORTED`, `AUTHORIZATION_NO_PERMISSION`) now apply to the returned Fault (previously only the builder copy was updated)
+- Nil-safety: `ToFullJSON` no longer panics on nil Fault with `ResolveMessages` (also keeps blanked non-public form from resolving real content)
+- Nil-safety: `NewPublicFaultFromAnyError` no longer panics when `OptionWhitelistedFaultKinds(inheritErrorCodes=true)` is used with a plain non-Fault error; nil `ConversionOption` entries are skipped
+- Nil-safety: typed-nil Fault `Error()` / `String()` no longer panic
 
 Upgrades:
 - Golang 1.26.0 is used from now

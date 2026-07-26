@@ -134,6 +134,9 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 	kindWasKept := false
 	inheritErrorCodes := false
 	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
 		if opt.getOptionId() == logLabelsOption {
 			logLabels = opt.getLogLabels()
 		} else if opt.getOptionId() == whitelistedKindsOption {
@@ -154,7 +157,7 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 	if !kindWasKept {
 		builder.WithErrorCodes(ERRCODE_INTERNAL_ERROR)
 	}
-	if inheritErrorCodes {
+	if inheritErrorCodes && isFault {
 		builder.WithErrorCodes(fault.GetErrorCodes()...)
 	}
 

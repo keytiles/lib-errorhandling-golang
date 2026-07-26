@@ -640,6 +640,7 @@ func (fault *defaultFault) ToFullJSON(options ...SerializationOption) ([]byte, e
 	leaveVars := slices.Contains(options, LeaveMessageVarsInLabels)
 
 	var _fault defaultFault
+	serializeContent := false
 	if fault == nil {
 		_fault = _EMPTY_FAULT
 	} else if !fault.IsPublic() && !slices.Contains(options, AllowNonPublicSerialization) {
@@ -647,6 +648,7 @@ func (fault *defaultFault) ToFullJSON(options ...SerializationOption) ([]byte, e
 		// this is safe to inherit
 		_fault.Retryable = fault.Retryable
 	} else {
+		serializeContent = true
 		_fault = *fault
 		if resolveMessages && !leaveVars {
 			// we need a copy of labels - as we might manipulate them and this should not affect original
@@ -654,7 +656,8 @@ func (fault *defaultFault) ToFullJSON(options ...SerializationOption) ([]byte, e
 		}
 	}
 
-	if resolveMessages {
+	// Only resolve when we are actually serializing Fault content (not nil / not blanked non-public form)
+	if resolveMessages && serializeContent {
 		var msgVars *kt_sets.Set[string]
 		_fault.MessageTemplate = fault.GetMessage()
 		if !leaveVars {
@@ -686,6 +689,9 @@ func (fault *defaultFault) ToFullJSON(options ...SerializationOption) ([]byte, e
 // The implementation of Error iface - this considers if the error is public or not.
 // If not public then just prints the resolved message and safe info (to avoid leaking internal info) - otherwise also reveals labels
 func (fault *defaultFault) Error() string {
+	if fault == nil {
+		return ""
+	}
 	codesStr := "[]"
 	if len(fault.ErrorCodes) > 0 {
 		codesStr = fmt.Sprintf("['%s']", strings.Join(fault.ErrorCodes, "','"))
@@ -701,6 +707,9 @@ func (fault *defaultFault) Error() string {
 
 // The fmt.Stringer implementation which is producing complete string representation of the error. Useful for logging purposes.
 func (fault *defaultFault) String() string {
+	if fault == nil {
+		return "Fault{nil}"
+	}
 	causeStr := "nil"
 	if fault.cause != nil {
 		isKtErr, ktErr := IsFault(fault.cause)

@@ -1,6 +1,6 @@
 # review-DocExampleTests v2.0 — plan
 
-- Created / last modified: 2026-07-26 12:37
+- Created / last modified: 2026-07-26 12:42
 - Target release: 2.0.4
 - Plan version: v2.0 (aligned with feature docs baseline `-v2.0`)
 
@@ -136,46 +136,32 @@ Serialization / misc:
 
 ### TDD fix stream (priority order)
 
-Process reminder for every step: **tests first (red) → user confirms tests → then code (green)**. Do not implement production fixes until the user OKs that step’s tests.
+Process note: early steps used strict red→confirm→green. From Priority 1 panics onward (user request), tests + fixes may land together for review.
 
-5. **P1 — Fix `ToFullJSON` nil + `ResolveMessages` panic** — **planned**
-   - Tests (red): `GetFaultAsFullJSON(nil)`, `GetFaultAsFullJSON(nil, ResolveMessages)`, optionally + `PrettyPrint`; assert no panic + empty/`NaN` defensive JSON.
-   - Await user confirmation of tests.
-   - Code: make `resolveMessages` branch nil-safe (use `_fault` / guards only).
-6. **P1 — Fix `inheritErrorCodes` panic on non-Fault** — **planned**
-   - Tests (red): plain `error` + `OptionWhitelistedFaultKinds(true, …)`; also plain error conversion without options; `NewPublicFaultFromAnyError(nil)`.
-   - Await user confirmation of tests.
-   - Code: only call `fault.GetErrorCodes()` when `isFault`; skip nil options safely if included in same batch.
-7. **P1 — Nil-safe `Error()` / `String()`** — **planned**
-   - Tests (red): typed-nil `Fault` (`*defaultFault` via helper or package-visible test seam if needed); assert no panic, stable empty-ish strings.
-   - Await user confirmation of tests.
-   - Code: add nil guards consistent with other methods.
+5. **P1 — Fix `ToFullJSON` nil + `ResolveMessages` panic** — **implemented**
+   - Tests: extended `TestGetFaultAsFullJSON_NilFaultIsSafe` with `ResolveMessages`.
+   - Code: resolve path only runs when serializing real content (`serializeContent`); avoids nil deref and avoids resolving into blanked non-public form.
+6. **P1 — Fix `inheritErrorCodes` panic on non-Fault** — **implemented**
+   - Tests: `TestNewPublicFaultFromAnyError_PlainErrorAndNilOptionsAreSafe`.
+   - Code: inherit codes only when `isFault`; nil original already returned nil.
+7. **P1 — Nil-safe `Error()` / `String()`** — **implemented**
+   - Tests: `TestTypedNilFault_ErrorAndStringAreSafe` via `VisibleForTesting_NilFault()`.
+   - Code: nil guards; `Error()` → `""`, `String()` → `"Fault{nil}"`.
 8. **P1b — Fix `Build()` retryable override** — **implemented**
    - Tests: `TestBuild_RetryableOverridesAndInherentNonRetryableKinds` in `tests/fault_test.go` (kept as agreed).
    - Code: `Build()` now applies auth/authz non-retryable overrides to `_fault.Retryable` (the returned instance), not `builder.fault` alone.
-   - `go test ./tests/ -run TestBuild_RetryableOverridesAndInherentNonRetryableKinds` green; full `./tests` suite green.
-9. **P1 — Harden nil `ConversionOption`** — **planned** (can merge with step 6 if user prefers one conversion batch)
-   - Tests (red): `options` slice containing a nil `ConversionOption`.
-   - Await user confirmation of tests.
-   - Code: skip nil options in the loop.
+9. **P1 — Harden nil `ConversionOption`** — **implemented** (merged with step 6)
+   - Nil options skipped in `NewPublicFaultFromAnyError` options loop.
 10. **P2 — Status-code error-code override tests (+ wrappers)** — **planned**
-    - Tests (red only until mapping verified; should mostly be green if mapping code is already correct — still write them first):
-      - Constraint / IllegalState override matrix for HTTP and gRPC
-      - `fault.GetHttpStatusCode()` / `GetGrpcStatusCode()` match package funcs
-    - Await user confirmation of tests.
-    - Code: only if any assertion fails against intended docs.
+    - Constraint / IllegalState override matrix for HTTP and gRPC
+    - `fault.GetHttpStatusCode()` / `GetGrpcStatusCode()` match package funcs
 11. **P2 — Remaining missing tests (builder / conversion / serialization / IsFault)** — **planned**
-    - Tests first for catalog items not covered in steps 5–10 (exact labels/templates, AddLabels, non-public ToFullJSON blank, PrettyPrint, IsFault, GetSource, whitelist without inherit codes, etc.).
-    - Await user confirmation of tests.
-    - Code only where tests expose real bugs.
+    - Catalog items not covered in steps 5–10.
 12. **P2 — Soft enhancements** — **planned** (after panic/bug stream)
-    - Serialization always-copy labels/errorCodes; consider cloning empty templates; document concurrency + exhausted HTTP/gRPC asymmetry; remove unused `properties` or leave with note; comment typo fixes.
-    - Prefer doc updates in companion `-v2.0.md` files in place when behavior is clarified.
-    - TDD where behavior changes; pure docs/comments do not need red tests.
+    - Serialization always-copy labels/errorCodes; document concurrency + exhausted HTTP/gRPC asymmetry; unused `properties`; comment typos.
 13. **Examples aligned with docs** — **planned**
-    - Cover create/enrich Fault, public conversion, status mapping, JSON serialization.
 14. **Final pass** — **planned**
-    - `go test ./...` green; update CHANGELOG 2.0.4 notes for panic/bug fixes; mark steps implemented in this plan.
+    - `go test ./...` green; CHANGELOG kept current; mark remaining steps as they land.
 
 ## Notes
 

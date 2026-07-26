@@ -143,4 +143,39 @@ func TestGetFaultAsFullJSON_NilFaultIsSafe(t *testing.T) {
 	json, err := kt_errors.GetFaultAsFullJSON(fault)
 	assert.NoError(t, err)
 	assert.Equal(t, `{"kind":"NaN","message":"","messagesByAudience":{},"isRetryable":false,"errorCodes":[],"labels":{}}`, string(json))
+
+	// ResolveMessages on nil must not panic (previously dereferenced nil receiver in resolve path)
+	json, err = kt_errors.GetFaultAsFullJSON(fault, kt_errors.ResolveMessages)
+	assert.NoError(t, err)
+	assert.Equal(t, `{"kind":"NaN","message":"","messagesByAudience":{},"isRetryable":false,"errorCodes":[],"labels":{}}`, string(json))
+}
+
+func TestNewPublicFaultFromAnyError_PlainErrorAndNilOptionsAreSafe(t *testing.T) {
+	// ---- GIVEN
+	plainErr := fmt.Errorf("plain boom")
+
+	// ---- WHEN / THEN
+	// inheritErrorCodes=true on a non-Fault must not panic
+	converted := kt_errors.NewPublicFaultFromAnyError(
+		plainErr,
+		"trId",
+		nil,
+		kt_errors.OptionWhitelistedFaultKinds(true, kt_errors.ValidationFault),
+		nil, // nil ConversionOption must be skipped safely
+	)
+	assert.True(t, converted.IsPublic())
+	assert.Equal(t, kt_errors.RuntimeFault, converted.GetKind())
+	assert.True(t, converted.HasErrorCode(kt_errors.ERRCODE_INTERNAL_ERROR))
+	assert.Equal(t, plainErr, converted.GetCause())
+
+	// nil original → nil
+	assert.Nil(t, kt_errors.NewPublicFaultFromAnyError(nil, "", nil))
+}
+
+func TestTypedNilFault_ErrorAndStringAreSafe(t *testing.T) {
+	// Typed-nil: Fault interface holding a nil *defaultFault (not a nil interface).
+	// testify NotNil treats typed-nil as nil, so we only assert no panic + stable strings.
+	fault := kt_errors.VisibleForTesting_NilFault()
+	assert.Equal(t, "", fault.Error())
+	assert.Equal(t, "Fault{nil}", fault.String())
 }
