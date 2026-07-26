@@ -10,10 +10,11 @@ Fixes / Improvements:
 - Applying Keytiles lib standards
   - Introducing constant `LIB_NAME`
   - Based on the above introducing constants `PACKAGE_NAME` in all packages - used as a prefix for kt_errors.Fault sources and Logging
-- Pulling in github.com/keytiles/lib-sets-golang/v2 v2.0.1
 
 Upgrades:
 - Golang 1.26.0 is used from now
+- Pulling in github.com/keytiles/lib-sets-golang/v2 v2.0.1 (it does not break consumers we just switch internally -> not breaking change)
+- Pulling in github.com/keytiles/lib-utils-golang/v2 v2.0.0 (it does not break consumers we just switch internally -> not breaking change)
 
 ## release 2.0.3
 

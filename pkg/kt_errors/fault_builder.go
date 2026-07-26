@@ -42,15 +42,15 @@ func (builder *FaultBuilder) Build() Fault {
 	}
 
 	// review the isRetryable flag
-	if builder.fault.Retryable {
-		switch builder.fault.Kind {
+	if _fault.Retryable {
+		switch _fault.Kind {
 		case AuthenticationFault:
 			if builder.errCodes.ContainsAny(AUTHENTICATION_ERRCODE_MISSING, AUTHENTICATION_ERRCODE_NOT_SUPPORTED) {
-				builder.fault.Retryable = false
+				_fault.Retryable = false
 			}
 		case AuthorizationFault:
 			if builder.errCodes.ContainsAny(AUTHORIZATION_NO_PERMISSION) {
-				builder.fault.Retryable = false
+				_fault.Retryable = false
 			}
 		}
 	}

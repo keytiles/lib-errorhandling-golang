@@ -794,3 +794,77 @@ func TestAbsolutMinimalisticPublicFaultJSONSerialization(t *testing.T) {
 	)
 
 }
+
+func TestBuild_RetryableOverridesAndInherentNonRetryableKinds(t *testing.T) {
+
+	// ==================
+	// Scenario 1
+	// ==================
+	// AuthenticationFault + AUTHENTICATION_ERRCODE_MISSING must force non-retryable even if builder asked for retryable.
+
+	// ---- GIVEN / WHEN
+	fault := kt_errors.NewPublicFaultBuilder(kt_errors.AuthenticationFault).
+		WithIsRetryable(true).
+		WithErrorCodes(kt_errors.AUTHENTICATION_ERRCODE_MISSING).
+		Build()
+	// ---- THEN
+	assert.False(t, fault.IsRetryable(), "AUTHENTICATION_ERRCODE_MISSING must force IsRetryable=false on built Fault")
+
+	// ==================
+	// Scenario 2
+	// ==================
+	// AuthenticationFault + AUTHENTICATION_ERRCODE_NOT_SUPPORTED must force non-retryable.
+
+	// ---- GIVEN / WHEN
+	fault = kt_errors.NewPublicFaultBuilder(kt_errors.AuthenticationFault).
+		WithIsRetryable(true).
+		WithErrorCodes(kt_errors.AUTHENTICATION_ERRCODE_NOT_SUPPORTED).
+		Build()
+	// ---- THEN
+	assert.False(t, fault.IsRetryable(), "AUTHENTICATION_ERRCODE_NOT_SUPPORTED must force IsRetryable=false on built Fault")
+
+	// ==================
+	// Scenario 3
+	// ==================
+	// AuthorizationFault + AUTHORIZATION_NO_PERMISSION must force non-retryable.
+
+	// ---- GIVEN / WHEN
+	fault = kt_errors.NewPublicFaultBuilder(kt_errors.AuthorizationFault).
+		WithIsRetryable(true).
+		WithErrorCodes(kt_errors.AUTHORIZATION_NO_PERMISSION).
+		Build()
+	// ---- THEN
+	assert.False(t, fault.IsRetryable(), "AUTHORIZATION_NO_PERMISSION must force IsRetryable=false on built Fault")
+
+	// ==================
+	// Scenario 4
+	// ==================
+	// Control: AuthenticationFault with a different auth code stays retryable when requested.
+
+	// ---- GIVEN / WHEN
+	fault = kt_errors.NewPublicFaultBuilder(kt_errors.AuthenticationFault).
+		WithIsRetryable(true).
+		WithErrorCodes(kt_errors.AUTHENTICATION_ERRCODE_FAILED).
+		Build()
+	// ---- THEN
+	assert.True(t, fault.IsRetryable(), "AUTHENTICATION_ERRCODE_FAILED should allow IsRetryable=true")
+
+	// ==================
+	// Scenario 5
+	// ==================
+	// Inherent non-retryable kinds: WithIsRetryable(true) must have no effect.
+
+	inherentNonRetryableKinds := []kt_errors.FaultKind{
+		kt_errors.ValidationFault,
+		kt_errors.NotImplementedFault,
+		kt_errors.ResourceNotFoundFault,
+	}
+	for _, kind := range inherentNonRetryableKinds {
+		// ---- GIVEN / WHEN
+		fault = kt_errors.NewPublicFaultBuilder(kind).
+			WithIsRetryable(true).
+			Build()
+		// ---- THEN
+		assert.False(t, fault.IsRetryable(), "kind %s is inherently non-retryable; WithIsRetryable(true) must be ignored", kind)
+	}
+}
