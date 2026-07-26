@@ -347,5 +347,5 @@ func GetFaultAsFullJSON(fault Fault, options ...SerializationOption) ([]byte, er
 }
 
 func getDefaultLogger() *kt_logging.Logger {
-	return kt_logging.GetLogger("keytiles.errorhandling")
+	return kt_logging.GetLogger(PACKAGE_NAME)
 }

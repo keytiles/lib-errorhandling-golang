@@ -4,6 +4,24 @@ We are following [Semantic versioning](https://semver.org/) in this library
 
 We will mark these with Git Tags
 
+## release 2.0.4
+
+Fixes / Improvements:
+- Applying Keytiles lib standards
+  - Introducing constant `LIB_NAME`
+  - Based on the above introducing constants `PACKAGE_NAME` in all packages - used as a prefix for kt_errors.Fault sources and Logging
+
+Upgrades:
+- Golang 1.26.0 is used from now
+
+## release 2.0.3
+
+Fixes:
+
+- Applying new Keytiles lib standards
+  - Introducing constant `LIB_NAME`
+  - Based on the above introducing constants `PACKAGE_NAME` in all packages - used as a prefix for kt_errors.Fault sources and Logging
+
 ## release 2.0.2
 
 Fixes:
