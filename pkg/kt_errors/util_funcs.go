@@ -4,7 +4,7 @@ import (
 	"slices"
 
 	"github.com/keytiles/lib-logging-golang/v2/pkg/kt_logging"
-	"github.com/keytiles/lib-utils-golang/pkg/kt_utils"
+	"github.com/keytiles/lib-utils-golang/v2/pkg/kt_utils"
 	"google.golang.org/grpc/codes"
 )
 
@@ -84,6 +84,9 @@ func OptionLogLabels(labels []kt_logging.Label) ConversionOption {
 // With this option you can specify a set of `FaultKind`s to safely inherit.
 // In this case the `ERRCODE_INTERNAL_ERROR` is not added if the kind of the original Fault was whitelisted. (As the whitelist itself already suggests a special
 // scenario.)
+//
+// If `inheritErrorCodes` is true, original error codes are copied only when the kind was actually kept (whitelisted). If the kind was not kept, codes are not
+// inherited — the public Fault stays on `RuntimeFault` + `ERRCODE_INTERNAL_ERROR` only.
 func OptionWhitelistedFaultKinds(inheritErrorCodes bool, kinds ...FaultKind) ConversionOption {
 	return optionWhiteListedKinds{
 		kinds:             kinds,
@@ -105,7 +108,7 @@ func OptionWhitelistedFaultKinds(inheritErrorCodes bool, kinds ...FaultKind) Con
 //   - Sets the `cause` of the error to the original error.
 //
 // In case the original error is isPublic=false `Fault` then we can keep some data from the original error for sure - but with care!
-// Retry behavior is alwqys inherited. However the message of the error is still considered unsafe. But if it carries message for audience `MSGAUDIENCE_USER`
+// Retry behavior is always inherited. However the message of the error is still considered unsafe. But if it carries message for audience `MSGAUDIENCE_USER`
 // then that one turns into the main message of the converted public error. All labels removed but the ones used in any `messageTemplatesByAudience`. And
 // original error codes are also removed. They can potentially again leak out internal implementation details.
 //
@@ -134,6 +137,9 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 	kindWasKept := false
 	inheritErrorCodes := false
 	for _, opt := range options {
+		if opt == nil {
+			continue
+		}
 		if opt.getOptionId() == logLabelsOption {
 			logLabels = opt.getLogLabels()
 		} else if opt.getOptionId() == whitelistedKindsOption {
@@ -154,7 +160,7 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 	if !kindWasKept {
 		builder.WithErrorCodes(ERRCODE_INTERNAL_ERROR)
 	}
-	if inheritErrorCodes {
+	if inheritErrorCodes && isFault && kindWasKept {
 		builder.WithErrorCodes(fault.GetErrorCodes()...)
 	}
 
@@ -184,7 +190,7 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 				"Unsafe error captured which we turn into a public Fault (kindKept: %t, inheritErrorCodes: %t) - hiding unsafe details. Orig error was: %s",
 				kindWasKept, inheritErrorCodes, kt_utils.VarPrinter{TheVar: fault},
 			)
-		// we can inherit the retry calssification for sure
+		// we can inherit the retry classification for sure
 		builder.WithIsRetryable(fault.IsRetryable())
 		audienceMsgTemplates := fault.GetMessageTemplatesByAudience()
 		userMsgTemplate := audienceMsgTemplates[MSGAUDIENCE_USER]
@@ -260,7 +266,7 @@ func GetGrpcStatusCodeForFault(fault Fault) (grpcStatus codes.Code) {
 			grpcStatus = codes.Unavailable
 		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXHAUSTED) {
 			grpcStatus = codes.ResourceExhausted
-		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED) {
+		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED) {
 			grpcStatus = codes.FailedPrecondition
 		}
 	}
@@ -287,7 +293,7 @@ func GetHttpStatusCodeForFault(fault Fault) (httpStatus int) {
 	// Now lets be error type specific from this point
 	switch fault.GetKind() {
 	case AuthenticationFault:
-		// UNATHORIZED
+		// UNAUTHORIZED
 		httpStatus = 401
 	case AuthorizationFault:
 		// FORBIDDEN
@@ -317,7 +323,7 @@ func GetHttpStatusCodeForFault(fault Fault) (httpStatus int) {
 			fault.HasErrorCode(ILLEGALSTATE_ERRCODE_TIMED_OUT) {
 			// SERVICE_UNAVAILABLE
 			httpStatus = 503
-		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED) {
+		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED) {
 			// PRECONDITION_FAILED
 			httpStatus = 412
 		}
@@ -347,5 +353,5 @@ func GetFaultAsFullJSON(fault Fault, options ...SerializationOption) ([]byte, er
 }
 
 func getDefaultLogger() *kt_logging.Logger {
-	return kt_logging.GetLogger("keytiles.errorhandling")
+	return kt_logging.GetLogger(PACKAGE_NAME)
 }

@@ -26,4 +26,15 @@ Every error like this is
 
 A more detailed blog post about the concept most likely will come and when it happens we add the link here.
 
-But until that, start reading here: [Fault interface](pkg/kt_errors/fault.go#fault)
+Feature docs (v2.0):
+
+- [Fault](docs/Fault-v2.0.md) — model, kinds, codes, builder, enrichment
+- [PublicFaultConversion](docs/PublicFaultConversion-v2.0.md) — safe boundary conversion
+- [StatusCodeMapping](docs/StatusCodeMapping-v2.0.md) — HTTP / gRPC status codes
+- [FaultSerialization](docs/FaultSerialization-v2.0.md) — natural / full JSON
+
+Example walkthrough:
+
+- [examples/basic](examples/basic) — create / enrich / convert / status / JSON (`go run ./examples/basic`)
+
+You can also start from the [Fault interface](pkg/kt_errors/fault.go#fault) in code.

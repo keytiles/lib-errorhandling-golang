@@ -4,6 +4,43 @@ We are following [Semantic versioning](https://semver.org/) in this library
 
 We will mark these with Git Tags
 
+## release 2.0.5
+
+Upgrades:
+- Pulling in github.com/keytiles/lib-logging-golang/v2 v2.1.1 (it does not break consumers we just switch internally -> not breaking change)
+
+## release 2.0.4
+
+Fixes / Improvements:
+- Applying Keytiles lib standards
+  - Introducing constant `LIB_NAME`
+  - Based on the above introducing constants `PACKAGE_NAME` in all packages - used as a prefix for kt_errors.Fault sources and Logging
+- `FaultBuilder.Build()`: auth/authz non-retryable overrides (`AUTHENTICATION_ERRCODE_MISSING` / `NOT_SUPPORTED`, `AUTHORIZATION_NO_PERMISSION`) now apply to the returned Fault (previously only the builder copy was updated)
+- Nil-safety: `ToFullJSON` no longer panics on nil Fault with `ResolveMessages` (also keeps blanked non-public form from resolving real content)
+- Nil-safety: `NewPublicFaultFromAnyError` no longer panics when `OptionWhitelistedFaultKinds(inheritErrorCodes=true)` is used with a plain non-Fault error; nil `ConversionOption` entries are skipped
+- Nil-safety: typed-nil Fault `Error()` / `String()` no longer panic
+- Removed unused internal `defaultFault.properties` field (never wired up)
+- Added correctly spelled `ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED`; deprecated misspelled `ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED` (same string value, kept for compatibility)
+- `OptionWhitelistedFaultKinds(inheritErrorCodes=true)`: original error codes are inherited only when the kind was kept; if kind is scrubbed to `RuntimeFault`, only `ERRCODE_INTERNAL_ERROR` is attached
+- Blank JSON templates (`_EMPTY_*` / `_NONPUBLIC_*`): maps/slices are allocated fresh per serialization call so package-level templates are never shared/mutated
+- JSON serialization always copies `errorCodes` / `labels` (no aliasing the live Fault)
+- `Fault.String()` limits nested Fault cause depth to avoid runaway stacks
+- Docs: concurrency note for `Add*`, `WithSource` appends, HTTP/gRPC asymmetry for `ILLEGALSTATE_ERRCODE_EXHAUSTED`
+- Added `examples/basic` walkthrough (create / enrich / convert / status / JSON)
+
+Upgrades:
+- Golang 1.26.0 is used from now
+- Pulling in github.com/keytiles/lib-sets-golang/v2 v2.0.1 (it does not break consumers we just switch internally -> not breaking change)
+- Pulling in github.com/keytiles/lib-utils-golang/v2 v2.0.0 (it does not break consumers we just switch internally -> not breaking change)
+
+## release 2.0.3
+
+Fixes:
+
+- Applying new Keytiles lib standards
+  - Introducing constant `LIB_NAME`
+  - Based on the above introducing constants `PACKAGE_NAME` in all packages - used as a prefix for kt_errors.Fault sources and Logging
+
 ## release 2.0.2
 
 Fixes:

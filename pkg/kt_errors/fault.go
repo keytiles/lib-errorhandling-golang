@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/keytiles/lib-sets-golang/ktsets"
-	"github.com/keytiles/lib-utils-golang/pkg/kt_utils"
+	"github.com/keytiles/lib-sets-golang/v2/pkg/kt_sets"
+	"github.com/keytiles/lib-utils-golang/v2/pkg/kt_utils"
 	"google.golang.org/grpc/codes"
 )
 
@@ -51,7 +51,10 @@ const (
 	// Can be a temporary problem when e.g. we rely on an external system but somehow we can not reach it right now
 	ILLEGALSTATE_ERRCODE_DEPENDENCY_UNAVAILABLE = "unavailable_dependency"
 	// What we expected did not happen / we got something else
-	ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED = "expectation_failed"
+	ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED = "expectation_failed"
+	// Deprecated: typo in the constant name ("EXCPECTATION" instead of "EXPECTATION"); use ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED.
+	// Same string value — kept for backward compatibility.
+	ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED = ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED
 	// Something timed out - job is not done, state is not good
 	ILLEGALSTATE_ERRCODE_TIMED_OUT = "timed_out"
 	// Something has reached its limits - no more is possible
@@ -66,7 +69,7 @@ const (
 
 	// Use this error code if you expected something else as a type
 	VALIDATION_ERRCODE_WRONG_DATATYPE = "wrong_datatype"
-	// Use this error code if you expected a sepcific format for something but you received something else instead
+	// Use this error code if you expected a specific format for something but you received something else instead
 	VALIDATION_ERRCODE_WRONG_FORMAT = "wrong_format"
 	// Use this error code if you expected a mandatory parameter but was not provided
 	VALIDATION_ERRCODE_MISSING_MANDATORY = "mandatory_info_missing"
@@ -141,7 +144,7 @@ const (
 //
 // An error like this is data rich - as we already wrote. It can
 //   - Carry error codes - for machine readability (strings - see predefined `*_ERRCODE_*` codes, but you can also define your own)
-//   - The error is typed - see `ErrorType`s! This also helps a lot in machine readability as well as properly convert then e.g. to Http/gRPC status codes!
+//   - The error is typed - see `FaultKind`s! This also helps a lot in machine readability as well as properly convert then e.g. to Http/gRPC status codes!
 //   - Carry the cause - the error which caused this error
 //   - Carry labels (key-value pairs) associated with this error
 //   - The message is not just a dumb string but can be a template! It can contain variable placeholders
@@ -153,6 +156,7 @@ const (
 //
 // Please note: this object is semi-immutable! Many things you can NOT change but some info you can extend, add to it (mutate) as error bubbles
 // upwards the call chain. See `AddXXX()` methods!
+// Mutation (`Add*` methods) is not safe for concurrent use on the same Fault instance — synchronize at the caller if needed.
 //
 // IMPORTANT NOTE - for logging or printing into string:
 // Use `VarPrinter` if you want the error printed using its `String()` method! Otherwise the `Error()` method will be used by Go by default as this
@@ -212,7 +216,7 @@ type Fault interface {
 	// this leads to lots of boilerplate code and often results in mistakes especially if you have multiple layers in your code and each one is doing the same.
 	//
 	// So instead enforcing this strategy `Fault` offers a simpler way. You do not need to create a brand new error just to add your context info but you
-	// can simply extend it in place and let the original prublom bubble upwards with all the details it already has! Basically, you simply extend the
+	// can simply extend it in place and let the original problem bubble upwards with all the details it already has! Basically, you simply extend the
 	// information with those details you know in the higher level layer only.
 	//
 	// Using this method you can do this. You can prepend (prefix) to the messageTemplate of the error with a piece of string.
@@ -308,7 +312,6 @@ type defaultFault struct {
 	Retryable                  bool              `json:"isRetryable" yaml:"isRetryable"`
 	ErrorCodes                 []string          `json:"errorCodes" yaml:"errorCodes"`
 	Labels                     map[string]any    `json:"labels" yaml:"labels"`
-	properties                 map[string]any
 	public                     bool
 	cause                      error
 	callStack                  []string
@@ -533,74 +536,71 @@ func (fault *defaultFault) GetGrpcStatusCode() codes.Code {
 }
 
 var (
+	// Blank templates for defensive serialization. Maps/slices stay nil on purpose —
+	// after copying into a local var, always assign fresh empty collections (see withFreshBlankCollections).
+	// Never mutate these package-level values.
 	_EMPTY_NATURAL_FORM = naturalFormFault{
-		Kind:       "NaN",
-		Message:    "",
-		ErrorCodes: make([]string, 0),
-		Labels:     make(map[string]any, 0),
-		Retryable:  false,
+		Kind:      "NaN",
+		Message:   "",
+		Retryable: false,
 	}
 
 	_NONPUBLIC_NATURAL_FORM = naturalFormFault{
-		Kind:       RuntimeFault,
-		Message:    "",
-		ErrorCodes: make([]string, 0),
-		Labels:     make(map[string]any, 0),
-		Retryable:  false,
+		Kind:      RuntimeFault,
+		Message:   "",
+		Retryable: false,
 	}
 
 	_EMPTY_FAULT = defaultFault{
-		Kind:                       "NaN",
-		MessageTemplate:            "",
-		MessageTemplatesByAudience: make(map[string]string, 0),
-		ErrorCodes:                 make([]string, 0),
-		Labels:                     make(map[string]any, 0),
-		Retryable:                  false,
+		Kind:            "NaN",
+		MessageTemplate: "",
+		Retryable:       false,
 	}
 
 	_NONPUBLIC_FAULT = defaultFault{
-		Kind:                       "NaN",
-		MessageTemplate:            "",
-		MessageTemplatesByAudience: make(map[string]string, 0),
-		ErrorCodes:                 make([]string, 0),
-		Labels:                     make(map[string]any, 0),
-		Retryable:                  false,
+		Kind:            "NaN",
+		MessageTemplate: "",
+		Retryable:       false,
 	}
 )
+
+// withFreshBlankNaturalCollections returns a copy of base with new empty ErrorCodes/Labels
+// so we never share map/slice headers with the package-level blank templates.
+func withFreshBlankNaturalCollections(base naturalFormFault) naturalFormFault {
+	base.ErrorCodes = make([]string, 0)
+	base.Labels = make(map[string]any)
+	return base
+}
+
+// withFreshBlankFaultCollections returns a copy of base with new empty maps/slices
+// so we never share map/slice headers with the package-level blank templates.
+func withFreshBlankFaultCollections(base defaultFault) defaultFault {
+	base.ErrorCodes = make([]string, 0)
+	base.Labels = make(map[string]any)
+	base.MessageTemplatesByAudience = make(map[string]string)
+	return base
+}
 
 func (fault *defaultFault) ToNaturalJSON(forAudience string, options ...SerializationOption) ([]byte, error) {
 	var natural naturalFormFault
 	if fault == nil {
-		natural = _EMPTY_NATURAL_FORM
+		natural = withFreshBlankNaturalCollections(_EMPTY_NATURAL_FORM)
 	} else if !fault.IsPublic() && !slices.Contains(options, AllowNonPublicSerialization) {
-		natural = _NONPUBLIC_NATURAL_FORM
-		// this is safe to inherit
+		natural = withFreshBlankNaturalCollections(_NONPUBLIC_NATURAL_FORM)
+		// this is safe to inherit (bool field on the local copy only)
 		natural.Retryable = fault.Retryable
 	} else {
 		natural = naturalFormFault{
 			Kind:       fault.Kind,
 			Retryable:  fault.Retryable,
-			ErrorCodes: fault.ErrorCodes,
-		}
-		if natural.ErrorCodes == nil {
-			natural.ErrorCodes = make([]string, 0)
+			ErrorCodes: fault.GetErrorCodes(), // copy — do not alias Fault slices
+			Labels:     fault.GetLabels(),     // copy — do not alias Fault maps
 		}
 
 		resolveMessages := slices.Contains(options, ResolveMessages)
 		leaveVars := slices.Contains(options, LeaveMessageVarsInLabels)
 
-		if resolveMessages && !leaveVars {
-			// we need a copy / empty map
-			natural.Labels = fault.GetLabels()
-		} else {
-			// for sure we will not manipulate labels - we dont need copy
-			natural.Labels = fault.Labels
-		}
-		if natural.Labels == nil {
-			natural.Labels = make(map[string]any)
-		}
-
-		var msgVars ktsets.Set[string]
+		var msgVars *kt_sets.Set[string]
 		if forAudience == "" {
 			if resolveMessages {
 				natural.Message = fault.GetMessage()
@@ -620,8 +620,8 @@ func (fault *defaultFault) ToNaturalJSON(forAudience string, options ...Serializ
 				natural.Message = fault.MessageTemplatesByAudience[forAudience]
 			}
 		}
-		if msgVars.Size() > 0 {
-			for _, k := range msgVars.GetAll() {
+		if resolveMessages && !leaveVars && msgVars.Size() > 0 {
+			for _, k := range msgVars.AsSlice() {
 				delete(natural.Labels, k)
 			}
 		}
@@ -640,22 +640,24 @@ func (fault *defaultFault) ToFullJSON(options ...SerializationOption) ([]byte, e
 	leaveVars := slices.Contains(options, LeaveMessageVarsInLabels)
 
 	var _fault defaultFault
+	serializeContent := false
 	if fault == nil {
-		_fault = _EMPTY_FAULT
+		_fault = withFreshBlankFaultCollections(_EMPTY_FAULT)
 	} else if !fault.IsPublic() && !slices.Contains(options, AllowNonPublicSerialization) {
-		_fault = _NONPUBLIC_FAULT
-		// this is safe to inherit
+		_fault = withFreshBlankFaultCollections(_NONPUBLIC_FAULT)
+		// this is safe to inherit (bool field on the local copy only)
 		_fault.Retryable = fault.Retryable
 	} else {
+		serializeContent = true
 		_fault = *fault
-		if resolveMessages && !leaveVars {
-			// we need a copy of labels - as we might manipulate them and this should not affect original
-			_fault.Labels = fault.GetLabels()
-		}
+		// always copy collections so marshal / ResolveMessages never aliases the live Fault
+		_fault.ErrorCodes = fault.GetErrorCodes()
+		_fault.Labels = fault.GetLabels()
 	}
 
-	if resolveMessages {
-		var msgVars ktsets.Set[string]
+	// Only resolve when we are actually serializing Fault content (not nil / not blanked non-public form)
+	if resolveMessages && serializeContent {
+		var msgVars *kt_sets.Set[string]
 		_fault.MessageTemplate = fault.GetMessage()
 		if !leaveVars {
 			msgVars = kt_utils.StringExtractVariableNames(fault.MessageTemplate)
@@ -670,7 +672,7 @@ func (fault *defaultFault) ToFullJSON(options ...SerializationOption) ([]byte, e
 		}
 
 		if msgVars.Size() > 0 {
-			for _, k := range msgVars.GetAll() {
+			for _, k := range msgVars.AsSlice() {
 				delete(_fault.Labels, k)
 			}
 		}
@@ -686,6 +688,9 @@ func (fault *defaultFault) ToFullJSON(options ...SerializationOption) ([]byte, e
 // The implementation of Error iface - this considers if the error is public or not.
 // If not public then just prints the resolved message and safe info (to avoid leaking internal info) - otherwise also reveals labels
 func (fault *defaultFault) Error() string {
+	if fault == nil {
+		return ""
+	}
 	codesStr := "[]"
 	if len(fault.ErrorCodes) > 0 {
 		codesStr = fmt.Sprintf("['%s']", strings.Join(fault.ErrorCodes, "','"))
@@ -700,18 +705,33 @@ func (fault *defaultFault) Error() string {
 }
 
 // The fmt.Stringer implementation which is producing complete string representation of the error. Useful for logging purposes.
+// Cause chains of nested Faults are printed recursively up to a fixed depth to avoid stack overflow on very deep or cyclic graphs.
 func (fault *defaultFault) String() string {
+	return fault.stringWithCauseDepth(0)
+}
+
+const _maxFaultCauseStringDepth = 8
+
+func (fault *defaultFault) stringWithCauseDepth(depth int) string {
+	if fault == nil {
+		return "Fault{nil}"
+	}
 	causeStr := "nil"
 	if fault.cause != nil {
-		isKtErr, ktErr := IsFault(fault.cause)
-		if isKtErr {
-			// we use the to string mechanism
-			causeStr = fmt.Sprintf("{%s}", ktErr.String())
+		if depth >= _maxFaultCauseStringDepth {
+			causeStr = "{...}"
 		} else {
-			// we print it normal way
-			causeStr = fmt.Sprintf("'%s'", fault.cause)
+			isKtErr, ktErr := IsFault(fault.cause)
+			if isKtErr {
+				if nested, ok := ktErr.(*defaultFault); ok {
+					causeStr = fmt.Sprintf("{%s}", nested.stringWithCauseDepth(depth+1))
+				} else {
+					causeStr = fmt.Sprintf("{%s}", ktErr.String())
+				}
+			} else {
+				causeStr = fmt.Sprintf("'%s'", fault.cause)
+			}
 		}
-
 	}
 	codesStr := "[]"
 	if len(fault.ErrorCodes) > 0 {
