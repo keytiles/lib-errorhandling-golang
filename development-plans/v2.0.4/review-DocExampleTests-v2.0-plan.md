@@ -1,6 +1,6 @@
 # review-DocExampleTests v2.0 — plan
 
-- Created / last modified: 2026-07-26 13:00
+- Created / last modified: 2026-07-26 13:30
 - Target release: 2.0.4
 - Plan version: v2.0 (aligned with feature docs baseline `-v2.0`)
 
@@ -161,11 +161,16 @@ Process note: early steps used strict red→confirm→green. From Priority 1 pan
     - `TestNonPublicFullJSON_AndPrettyPrint` — blanked non-public ToFullJSON + PrettyPrint
     - `TestIsFault` — nil / plain error / Fault
     - BDD GIVEN/WHEN/THEN style; no production code changes required.
-12. **P2 — Soft enhancements** — **planned** (after panic/bug stream)
-    - Serialization always-copy labels/errorCodes; document concurrency + exhausted HTTP/gRPC asymmetry; unused `properties`; comment typos.
-13. **Examples aligned with docs** — **planned**
-14. **Final pass** — **planned**
-    - `go test ./...` green; CHANGELOG kept current; mark remaining steps as they land.
+12. **P2 — Soft enhancements** — **implemented**
+    - Always-copy `errorCodes` / `labels` in JSON serialize paths
+    - Blank templates use fresh collections per call (already landed)
+    - `String()` nested-cause depth limit
+    - Removed unused `properties`; `EXPECTATION_FAILED` + deprecated typo alias; inheritErrorCodes only when kind kept
+    - Comment typo fixes; docs for concurrency, WithSource appends, exhausted HTTP/gRPC asymmetry
+13. **Examples aligned with docs** — **implemented**
+    - `examples/basic/main.go` — create / enrich / convert / status / JSON; linked from README
+14. **Final pass** — **implemented**
+    - `go test ./tests` green; `go run ./examples/basic` OK; CHANGELOG 2.0.4 updated
 
 ## Notes
 

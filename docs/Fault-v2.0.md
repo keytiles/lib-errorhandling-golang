@@ -24,6 +24,7 @@ Within 2.0.x (release 2.0.4):
 - `FaultBuilder.Build()` auth/authz non-retryable overrides now apply to the **returned** Fault (previously only an internal builder copy was updated). Documented behavior below was already the intended contract.
 - Typed-nil `Fault` receivers: `Error()` / `String()` are nil-safe as well (`Error()` → `""`, `String()` → `"Fault{nil}"`).
 - Added correctly spelled `ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED`; misspelled `ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED` is deprecated (same value).
+- `Add*` concurrency note; `WithSource` appends on repeat; `String()` limits nested cause depth.
 
 ## TLDR
 
@@ -43,6 +44,7 @@ The goal is to avoid thin string-only errors and avoid heavy “map error at eve
 - or map once to HTTP/gRPC / JSON (see StatusCodeMapping / FaultSerialization)
 
 `Fault` is semi-immutable: kind / public flag / core message are set at build time; enrichment via `Add*` is intentional mutation as the error travels upward.
+`Add*` mutation is **not** safe for concurrent use on the same Fault instance — synchronize at the caller if needed.
 
 ## Fault kinds
 
@@ -164,7 +166,7 @@ Inspection helpers:
 
 - Cause: any `error` via builder `WithCause` / `WithoutCause`; read with `GetCause()`.
 - Source / call stack are cheap string hops (no runtime stack traces):
-  - Builder `WithSource(parts...)` joins parts with `"."` and seeds the stack
+  - Builder `WithSource(parts...)` joins parts with `"."` and seeds the stack. Calling `WithSource` again **appends** another hop (does not replace).
   - `AddCallerToCallStack(parts...)` appends another hop as the error bubbles
   - `GetSource()` — origin (deepest)
   - `GetCallStack()` — copy, ordered from outer caller to source
@@ -221,7 +223,7 @@ if ok, fault := kt_errors.IsFault(err); ok {
 ## Logging and string forms
 
 - `Error()` — compact `error` interface form. For non-public Faults it omits labels to reduce leak risk. For public Faults it includes labels. Nil receiver → `""`.
-- `String()` — full diagnostic form (kind, template, retryable, public, codes, call stack, cause, audience messages, labels). Prefer this for logs. Nil receiver → `"Fault{nil}"`.
+- `String()` — full diagnostic form (kind, template, retryable, public, codes, call stack, cause, audience messages, labels). Prefer this for logs. Nil receiver → `"Fault{nil}"`. Nested Fault causes are printed recursively up to a fixed depth (then `{...}`) to avoid runaway stacks.
 - Tip from the interface docs: use `kt_utils.VarPrinter{TheVar: fault}` so `String()` is used instead of Go’s default `Error()` path for `error` values.
 
 ## Status codes and JSON

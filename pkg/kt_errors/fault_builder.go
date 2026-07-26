@@ -60,13 +60,13 @@ func (builder *FaultBuilder) Build() Fault {
 
 // Sets if this error is retryable or not.
 //
-// Please note: certain error types are inheritedly not retryable, e.g. ValidationError or NotImplementedError. Invoking this method
+// Please note: certain error types are inherently not retryable, e.g. ValidationFault or NotImplementedFault. Invoking this method
 // on any of those will simply have no effect.
 func (builder *FaultBuilder) WithIsRetryable(flag bool) *FaultBuilder {
 	switch builder.fault.Kind {
 	// only these types can be classified as retryable
 	case NotImplementedFault, ValidationFault, ResourceNotFoundFault:
-		// we skip it - these are inheritedly not retryable
+		// we skip it - these are inherently not retryable
 	default:
 		builder.fault.Retryable = flag
 	}
@@ -145,6 +145,7 @@ func (builder *FaultBuilder) WithoutCause() *FaultBuilder {
 // the error originates from. We do it in the easiest way: you can put this into a string the way you want :-) That's it.
 // As you can see, if you want you can pass in multiple string elements. If you do so, they will be automatically concatenated
 // using "." separator.
+// Calling WithSource more than once appends another hop (same as AddCallerToCallStack) — it does not replace the previous source.
 func (builder *FaultBuilder) WithSource(src ...string) *FaultBuilder {
 	builder.fault.callStack = append(builder.fault.callStack, strings.Join(src, "."))
 	return builder

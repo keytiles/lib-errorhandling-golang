@@ -101,6 +101,7 @@ Error-code overrides:
 ## Practical notes
 
 - Kind alone is often enough; attach the listed error codes when you need the finer statuses (conflict vs precondition, unavailable vs exhausted, etc.).
+- **Asymmetry:** `ILLEGALSTATE_ERRCODE_EXHAUSTED` maps to HTTP `503` but gRPC `ResourceExhausted` (not `Unavailable`). Dependency-unavailable / timed-out stay aligned as HTTP `503` / gRPC `Unavailable`.
 - After `NewPublicFaultFromAnyError`, non-whitelisted Faults become `RuntimeFault` + `ERRCODE_INTERNAL_ERROR` → status stays internal (`500` / `INTERNAL`), which is intentional.
 - If you whitelist kinds during conversion, those kinds can produce the more specific statuses above.
 - Status mapping does not serialize the body — combine with [FaultSerialization-v2.0.md](FaultSerialization-v2.0.md) for HTTP JSON error payloads.

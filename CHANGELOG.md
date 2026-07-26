@@ -17,6 +17,11 @@ Fixes / Improvements:
 - Removed unused internal `defaultFault.properties` field (never wired up)
 - Added correctly spelled `ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED`; deprecated misspelled `ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED` (same string value, kept for compatibility)
 - `OptionWhitelistedFaultKinds(inheritErrorCodes=true)`: original error codes are inherited only when the kind was kept; if kind is scrubbed to `RuntimeFault`, only `ERRCODE_INTERNAL_ERROR` is attached
+- Blank JSON templates (`_EMPTY_*` / `_NONPUBLIC_*`): maps/slices are allocated fresh per serialization call so package-level templates are never shared/mutated
+- JSON serialization always copies `errorCodes` / `labels` (no aliasing the live Fault)
+- `Fault.String()` limits nested Fault cause depth to avoid runaway stacks
+- Docs: concurrency note for `Add*`, `WithSource` appends, HTTP/gRPC asymmetry for `ILLEGALSTATE_ERRCODE_EXHAUSTED`
+- Added `examples/basic` walkthrough (create / enrich / convert / status / JSON)
 
 Upgrades:
 - Golang 1.26.0 is used from now

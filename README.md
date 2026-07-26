@@ -33,4 +33,8 @@ Feature docs (v2.0):
 - [StatusCodeMapping](docs/StatusCodeMapping-v2.0.md) — HTTP / gRPC status codes
 - [FaultSerialization](docs/FaultSerialization-v2.0.md) — natural / full JSON
 
+Example walkthrough:
+
+- [examples/basic](examples/basic) — create / enrich / convert / status / JSON (`go run ./examples/basic`)
+
 You can also start from the [Fault interface](pkg/kt_errors/fault.go#fault) in code.

@@ -108,7 +108,7 @@ func OptionWhitelistedFaultKinds(inheritErrorCodes bool, kinds ...FaultKind) Con
 //   - Sets the `cause` of the error to the original error.
 //
 // In case the original error is isPublic=false `Fault` then we can keep some data from the original error for sure - but with care!
-// Retry behavior is alwqys inherited. However the message of the error is still considered unsafe. But if it carries message for audience `MSGAUDIENCE_USER`
+// Retry behavior is always inherited. However the message of the error is still considered unsafe. But if it carries message for audience `MSGAUDIENCE_USER`
 // then that one turns into the main message of the converted public error. All labels removed but the ones used in any `messageTemplatesByAudience`. And
 // original error codes are also removed. They can potentially again leak out internal implementation details.
 //
@@ -190,7 +190,7 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 				"Unsafe error captured which we turn into a public Fault (kindKept: %t, inheritErrorCodes: %t) - hiding unsafe details. Orig error was: %s",
 				kindWasKept, inheritErrorCodes, kt_utils.VarPrinter{TheVar: fault},
 			)
-		// we can inherit the retry calssification for sure
+		// we can inherit the retry classification for sure
 		builder.WithIsRetryable(fault.IsRetryable())
 		audienceMsgTemplates := fault.GetMessageTemplatesByAudience()
 		userMsgTemplate := audienceMsgTemplates[MSGAUDIENCE_USER]
@@ -293,7 +293,7 @@ func GetHttpStatusCodeForFault(fault Fault) (httpStatus int) {
 	// Now lets be error type specific from this point
 	switch fault.GetKind() {
 	case AuthenticationFault:
-		// UNATHORIZED
+		// UNAUTHORIZED
 		httpStatus = 401
 	case AuthorizationFault:
 		// FORBIDDEN
