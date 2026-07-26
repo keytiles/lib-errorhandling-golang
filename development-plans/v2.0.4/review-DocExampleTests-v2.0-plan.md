@@ -1,6 +1,6 @@
 # review-DocExampleTests v2.0 — plan
 
-- Created / last modified: 2026-07-26 12:42
+- Created / last modified: 2026-07-26 13:00
 - Target release: 2.0.4
 - Plan version: v2.0 (aligned with feature docs baseline `-v2.0`)
 
@@ -152,11 +152,15 @@ Process note: early steps used strict red→confirm→green. From Priority 1 pan
    - Code: `Build()` now applies auth/authz non-retryable overrides to `_fault.Retryable` (the returned instance), not `builder.fault` alone.
 9. **P1 — Harden nil `ConversionOption`** — **implemented** (merged with step 6)
    - Nil options skipped in `NewPublicFaultFromAnyError` options loop.
-10. **P2 — Status-code error-code override tests (+ wrappers)** — **planned**
-    - Constraint / IllegalState override matrix for HTTP and gRPC
-    - `fault.GetHttpStatusCode()` / `GetGrpcStatusCode()` match package funcs
-11. **P2 — Remaining missing tests (builder / conversion / serialization / IsFault)** — **planned**
-    - Catalog items not covered in steps 5–10.
+10. **P2 — Status-code error-code override tests (+ wrappers)** — **implemented**
+    - Tests: `TestHttpStatusCode_ErrorCodeOverrides`, `TestGrpcStatusCode_ErrorCodeOverrides`, `TestStatusCodeWrappers_MatchPackageFuncs_OnKindDefaults` in `tests/util_funcs_test.go`.
+    - Mapping code already matched docs — no production code changes required.
+11. **P2 — Remaining missing tests (builder / conversion / serialization / IsFault)** — **implemented**
+    - `TestBuilderExactApis_AddLabels_GetSource_AndEmptyContextNoOps` — exact labels/audiences, AddLabels, empty context no-ops, GetSource vs call stack
+    - `TestPublicFaultCreation_WhitelistWithoutInheritingErrorCodes` — whitelist kind kept, inheritErrorCodes=false
+    - `TestNonPublicFullJSON_AndPrettyPrint` — blanked non-public ToFullJSON + PrettyPrint
+    - `TestIsFault` — nil / plain error / Fault
+    - BDD GIVEN/WHEN/THEN style; no production code changes required.
 12. **P2 — Soft enhancements** — **planned** (after panic/bug stream)
     - Serialization always-copy labels/errorCodes; document concurrency + exhausted HTTP/gRPC asymmetry; unused `properties`; comment typos.
 13. **Examples aligned with docs** — **planned**

@@ -868,3 +868,156 @@ func TestBuild_RetryableOverridesAndInherentNonRetryableKinds(t *testing.T) {
 		assert.False(t, fault.IsRetryable(), "kind %s is inherently non-retryable; WithIsRetryable(true) must be ignored", kind)
 	}
 }
+
+// Covers remaining builder helpers: exact replace APIs, audience removal, AddLabels, empty AddContext no-ops, GetSource vs call stack.
+func TestBuilderExactApis_AddLabels_GetSource_AndEmptyContextNoOps(t *testing.T) {
+
+	// ==================
+	// Scenario 1
+	// ==================
+	// WithExactLabels replaces previous labels; WithExactMessageTemplatesByAudience replaces audience map;
+	// WithoutMessageTemplateForAudiences removes selected audiences.
+
+	// ---- GIVEN
+	builder := kt_errors.NewPublicFaultBuilder(kt_errors.ValidationFault).
+		WithLabel("old", "keep-me-not").
+		WithMessageTemplateForAudience("a", "msg-a").
+		WithMessageTemplateForAudience("b", "msg-b").
+		WithExactLabels(map[string]any{"only": "this"}).
+		WithExactMessageTemplatesByAudience(map[string]string{"user": "hello {only}"}).
+		WithoutMessageTemplateForAudiences("user")
+
+	// ---- WHEN
+	fault := builder.Build()
+	// ---- THEN
+	assert.Equal(t, map[string]any{"only": "this"}, fault.GetLabels())
+	assert.Equal(t, 0, len(fault.GetMessageTemplatesByAudience()))
+
+	// ==================
+	// Scenario 2
+	// ==================
+	// AddLabels merges; empty AddContext* calls are no-ops; GetSource is the deepest / origin hop.
+
+	// ---- GIVEN
+	fault = kt_errors.NewFaultBuilder(kt_errors.IllegalStateFault).
+		WithMessageTemplate("base").
+		WithMessageTemplateForAudience("ops", "ops-base").
+		WithLabel("a", "1").
+		WithSource("pkg", "origin").
+		Build()
+
+	// ---- WHEN
+	fault.AddLabels(map[string]any{"b": "2"})
+	fault.AddContextToMessage("")
+	fault.AddContextToAudienceMessage("ops", "")
+	fault.AddCallerToCallStack("pkg", "caller")
+	// ---- THEN
+	assert.Equal(t, "base", fault.GetMessageTemplate())
+	assert.Equal(t, "ops-base", fault.GetMessageTemplateForAudience("ops"))
+	assert.Equal(t, map[string]any{"a": "1", "b": "2"}, fault.GetLabels())
+	assert.Equal(t, "pkg.origin", fault.GetSource())
+	assert.Equal(t, []string{"pkg.caller", "pkg.origin"}, fault.GetCallStack())
+}
+
+// Whitelist keeps kind but inheritErrorCodes=false drops original codes and does not add ERRCODE_INTERNAL_ERROR.
+func TestPublicFaultCreation_WhitelistWithoutInheritingErrorCodes(t *testing.T) {
+
+	// ---- GIVEN
+	originalFault := kt_errors.NewFaultBuilder(kt_errors.ValidationFault).
+		WithMessageTemplate("internal detail {x}").
+		WithMessageTemplateForAudience(kt_errors.MSGAUDIENCE_USER, "bad field {field}").
+		WithErrorCodes(kt_errors.VALIDATION_ERRCODE_INVALID_VALUE, "custom_internal").
+		WithLabel("field", "email").
+		WithLabel("x", "secret").
+		Build()
+
+	// ---- WHEN
+	converted := kt_errors.NewPublicFaultFromAnyError(
+		originalFault,
+		"",
+		nil,
+		kt_errors.OptionWhitelistedFaultKinds(false, kt_errors.ValidationFault),
+	)
+
+	// ---- THEN
+	assert.True(t, converted.IsPublic())
+	assert.Equal(t, kt_errors.ValidationFault, converted.GetKind())
+	assert.Equal(t, 0, len(converted.GetErrorCodes()))
+	assert.False(t, converted.HasErrorCode(kt_errors.ERRCODE_INTERNAL_ERROR))
+	assert.False(t, converted.HasErrorCode(kt_errors.VALIDATION_ERRCODE_INVALID_VALUE))
+	assert.Equal(t, "bad field {field}", converted.GetMessageTemplate())
+	assert.Equal(t, map[string]any{"field": "email"}, converted.GetLabels())
+}
+
+// If kind is not whitelisted, inheritErrorCodes=true must not copy original codes onto RuntimeFault+internal.
+func TestPublicFaultCreation_InheritErrorCodesIgnoredWhenKindNotKept(t *testing.T) {
+
+	// ---- GIVEN
+	originalFault := kt_errors.NewFaultBuilder(kt_errors.IllegalStateFault).
+		WithMessageTemplate("internal db detail").
+		WithErrorCodes(kt_errors.ILLEGALSTATE_ERRCODE_CONFIG_ERROR, "internal_db_detail").
+		Build()
+
+	// ---- WHEN
+	// Whitelist only Validation — IllegalState is scrubbed; inheritErrorCodes must not leak original codes
+	converted := kt_errors.NewPublicFaultFromAnyError(
+		originalFault,
+		"",
+		nil,
+		kt_errors.OptionWhitelistedFaultKinds(true, kt_errors.ValidationFault),
+	)
+
+	// ---- THEN
+	assert.True(t, converted.IsPublic())
+	assert.Equal(t, kt_errors.RuntimeFault, converted.GetKind())
+	assert.Equal(t, 1, len(converted.GetErrorCodes()))
+	assert.True(t, converted.HasErrorCode(kt_errors.ERRCODE_INTERNAL_ERROR))
+	assert.False(t, converted.HasErrorCode(kt_errors.ILLEGALSTATE_ERRCODE_CONFIG_ERROR))
+	assert.False(t, converted.HasErrorCode("internal_db_detail"))
+}
+
+// Non-public ToFullJSON stays blanked by default; PrettyPrint indents public JSON.
+func TestNonPublicFullJSON_AndPrettyPrint(t *testing.T) {
+
+	// ==================
+	// Scenario 1
+	// ==================
+	// Non-public Fault → defensive blank full JSON (retryable may be inherited).
+
+	// ---- GIVEN
+	fault := kt_errors.NewFaultBuilder(kt_errors.IllegalStateFault).
+		WithIsRetryable(true).
+		WithMessageTemplate("secret {var1}").
+		WithMessageTemplateForAudience("ops", "ops secret").
+		WithErrorCodes(kt_errors.ILLEGALSTATE_ERRCODE_CONFIG_ERROR).
+		WithLabel("var1", "value1").
+		Build()
+
+	// ---- WHEN
+	jsonBytes, err := fault.ToFullJSON()
+	// ---- THEN
+	assert.NoError(t, err)
+	assert.Equal(
+		t,
+		`{"kind":"NaN","message":"","messagesByAudience":{},"isRetryable":true,"errorCodes":[],"labels":{}}`,
+		string(jsonBytes),
+	)
+
+	// ==================
+	// Scenario 2
+	// ==================
+	// PrettyPrint on a public Fault returns indented JSON.
+
+	// ---- GIVEN
+	publicFault := kt_errors.NewPublicFaultBuilder(kt_errors.ValidationFault).
+		WithMessageTemplate("bad").
+		Build()
+
+	// ---- WHEN
+	jsonBytes, err = publicFault.ToNaturalJSON("", kt_errors.PrettyPrint)
+	// ---- THEN
+	assert.NoError(t, err)
+	assert.Contains(t, string(jsonBytes), "\n")
+	assert.Contains(t, string(jsonBytes), "\t")
+	assert.Contains(t, string(jsonBytes), `"kind": "validation"`)
+}

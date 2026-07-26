@@ -51,7 +51,10 @@ const (
 	// Can be a temporary problem when e.g. we rely on an external system but somehow we can not reach it right now
 	ILLEGALSTATE_ERRCODE_DEPENDENCY_UNAVAILABLE = "unavailable_dependency"
 	// What we expected did not happen / we got something else
-	ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED = "expectation_failed"
+	ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED = "expectation_failed"
+	// Deprecated: typo in the constant name ("EXCPECTATION" instead of "EXPECTATION"); use ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED.
+	// Same string value — kept for backward compatibility.
+	ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED = ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED
 	// Something timed out - job is not done, state is not good
 	ILLEGALSTATE_ERRCODE_TIMED_OUT = "timed_out"
 	// Something has reached its limits - no more is possible
@@ -308,7 +311,6 @@ type defaultFault struct {
 	Retryable                  bool              `json:"isRetryable" yaml:"isRetryable"`
 	ErrorCodes                 []string          `json:"errorCodes" yaml:"errorCodes"`
 	Labels                     map[string]any    `json:"labels" yaml:"labels"`
-	properties                 map[string]any
 	public                     bool
 	cause                      error
 	callStack                  []string

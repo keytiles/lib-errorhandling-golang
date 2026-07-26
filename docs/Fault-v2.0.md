@@ -23,6 +23,7 @@ Within 2.0.x (release 2.0.4):
 
 - `FaultBuilder.Build()` auth/authz non-retryable overrides now apply to the **returned** Fault (previously only an internal builder copy was updated). Documented behavior below was already the intended contract.
 - Typed-nil `Fault` receivers: `Error()` / `String()` are nil-safe as well (`Error()` → `""`, `String()` → `"Fault{nil}"`).
+- Added correctly spelled `ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED`; misspelled `ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED` is deprecated (same value).
 
 ## TLDR
 
@@ -86,7 +87,8 @@ Error codes are plain strings for machine readability. Predefined constants exis
 - `ILLEGALSTATE_ERRCODE_CONFIG_ERROR` — `"config_error"`
 - `ILLEGALSTATE_ERRCODE_DEPENDENCY_MISSING` — `"missing_dependency"`
 - `ILLEGALSTATE_ERRCODE_DEPENDENCY_UNAVAILABLE` — `"unavailable_dependency"`
-- `ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED` — `"expectation_failed"` (note the constant spelling)
+- `ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED` — `"expectation_failed"`
+- `ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED` — deprecated alias (typo in name: "EXCPECTATION"); same value as `ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED`
 - `ILLEGALSTATE_ERRCODE_TIMED_OUT` — `"timed_out"`
 - `ILLEGALSTATE_ERRCODE_EXHAUSTED` — `"exhausted"`
 - `ILLEGALSTATE_ERRCODE_SERIALIZATION_FAILED` — `"serialization_failed"`

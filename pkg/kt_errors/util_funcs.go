@@ -84,6 +84,9 @@ func OptionLogLabels(labels []kt_logging.Label) ConversionOption {
 // With this option you can specify a set of `FaultKind`s to safely inherit.
 // In this case the `ERRCODE_INTERNAL_ERROR` is not added if the kind of the original Fault was whitelisted. (As the whitelist itself already suggests a special
 // scenario.)
+//
+// If `inheritErrorCodes` is true, original error codes are copied only when the kind was actually kept (whitelisted). If the kind was not kept, codes are not
+// inherited — the public Fault stays on `RuntimeFault` + `ERRCODE_INTERNAL_ERROR` only.
 func OptionWhitelistedFaultKinds(inheritErrorCodes bool, kinds ...FaultKind) ConversionOption {
 	return optionWhiteListedKinds{
 		kinds:             kinds,
@@ -157,7 +160,7 @@ func NewPublicFaultFromAnyError(original error, transactionId string, loggerToUs
 	if !kindWasKept {
 		builder.WithErrorCodes(ERRCODE_INTERNAL_ERROR)
 	}
-	if inheritErrorCodes && isFault {
+	if inheritErrorCodes && isFault && kindWasKept {
 		builder.WithErrorCodes(fault.GetErrorCodes()...)
 	}
 
@@ -263,7 +266,7 @@ func GetGrpcStatusCodeForFault(fault Fault) (grpcStatus codes.Code) {
 			grpcStatus = codes.Unavailable
 		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXHAUSTED) {
 			grpcStatus = codes.ResourceExhausted
-		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED) {
+		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED) {
 			grpcStatus = codes.FailedPrecondition
 		}
 	}
@@ -320,7 +323,7 @@ func GetHttpStatusCodeForFault(fault Fault) (httpStatus int) {
 			fault.HasErrorCode(ILLEGALSTATE_ERRCODE_TIMED_OUT) {
 			// SERVICE_UNAVAILABLE
 			httpStatus = 503
-		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED) {
+		} else if fault.HasErrorCode(ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED) {
 			// PRECONDITION_FAILED
 			httpStatus = 412
 		}

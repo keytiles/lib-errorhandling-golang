@@ -14,6 +14,9 @@ Fixes / Improvements:
 - Nil-safety: `ToFullJSON` no longer panics on nil Fault with `ResolveMessages` (also keeps blanked non-public form from resolving real content)
 - Nil-safety: `NewPublicFaultFromAnyError` no longer panics when `OptionWhitelistedFaultKinds(inheritErrorCodes=true)` is used with a plain non-Fault error; nil `ConversionOption` entries are skipped
 - Nil-safety: typed-nil Fault `Error()` / `String()` no longer panic
+- Removed unused internal `defaultFault.properties` field (never wired up)
+- Added correctly spelled `ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED`; deprecated misspelled `ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED` (same string value, kept for compatibility)
+- `OptionWhitelistedFaultKinds(inheritErrorCodes=true)`: original error codes are inherited only when the kind was kept; if kind is scrubbed to `RuntimeFault`, only `ERRCODE_INTERNAL_ERROR` is attached
 
 Upgrades:
 - Golang 1.26.0 is used from now

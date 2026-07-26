@@ -19,6 +19,10 @@ Notable baseline behavior carried from late v1.3.x:
 
 No v2.0-specific breaking change to these mapping functions.
 
+Within 2.0.x (release 2.0.4):
+
+- Docs / code refer to correctly spelled `ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED` for expectation-failed overrides (deprecated misspelled alias still works; same string value).
+
 ## TLDR
 
 - Use `GetHttpStatusCodeForFault(fault)` / `GetGrpcStatusCodeForFault(fault)` (or the `Fault` method wrappers) when building an error response.
@@ -69,7 +73,7 @@ Error-code overrides:
   - `CONSTRAINTVIOLATION_ERRCODE_DOES_NOT_EXIST` → `404`
 - `IllegalStateFault`
   - `ILLEGALSTATE_ERRCODE_DEPENDENCY_UNAVAILABLE` or `ILLEGALSTATE_ERRCODE_EXHAUSTED` or `ILLEGALSTATE_ERRCODE_TIMED_OUT` → `503`
-  - `ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED` → `412`
+  - `ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED` → `412`
 
 ## gRPC mapping (public Faults)
 
@@ -92,7 +96,7 @@ Error-code overrides:
 - `IllegalStateFault`
   - `ILLEGALSTATE_ERRCODE_DEPENDENCY_UNAVAILABLE` or `ILLEGALSTATE_ERRCODE_TIMED_OUT` → `Unavailable`
   - `ILLEGALSTATE_ERRCODE_EXHAUSTED` → `ResourceExhausted`
-  - `ILLEGALSTATE_ERRCODE_EXCPECTATION_FAILED` → `FailedPrecondition`
+  - `ILLEGALSTATE_ERRCODE_EXPECTATION_FAILED` → `FailedPrecondition`
 
 ## Practical notes
 
