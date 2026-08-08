@@ -3,8 +3,8 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
 github.com/google/go-cmp v0.7.0/go.mod h1:pXiqmnSA92OHEEa9HXL2W4E7lf9JzCmGVUdgjX3N/iU=
-github.com/keytiles/lib-logging-golang/v2 v2.1.1 h1:I92ODoTd2o01PAZ5CB4myPNTjLBGSsjfpwXFTkDz86w=
-github.com/keytiles/lib-logging-golang/v2 v2.1.1/go.mod h1:W1ntMgVr0UaSuWA8mmsob6nmOEVHghMWPltc7sCNw24=
+github.com/keytiles/lib-logging-golang/v2 v2.2.0 h1:dTFIHHmog6CbMkBL/NZPfhg2iGvqw+8hqs9SBn/NZfU=
+github.com/keytiles/lib-logging-golang/v2 v2.2.0/go.mod h1:W1ntMgVr0UaSuWA8mmsob6nmOEVHghMWPltc7sCNw24=
 github.com/keytiles/lib-sets-golang/v2 v2.0.1 h1:nqEvb8mOHR5paZfWHGjVmMUtVv87B6xYqisHA9TLFU0=
 github.com/keytiles/lib-sets-golang/v2 v2.0.1/go.mod h1:yw/gT6NDWzs+x+c4aTBYC7CwRGbOvsgsMo8AFpHwz7Q=
 github.com/keytiles/lib-utils-golang/v2 v2.0.0 h1:XPYLHEAt4JB0K2kVrsELCozZoQkDaC3mUKXn8nuTGLg=

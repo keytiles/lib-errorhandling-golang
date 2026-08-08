@@ -4,6 +4,11 @@ We are following [Semantic versioning](https://semver.org/) in this library
 
 We will mark these with Git Tags
 
+## release 2.0.6
+
+Fixes / Enhancements
+- brings latest lib-logging-golang - v2.2.0
+
 ## release 2.0.5
 
 Upgrades:

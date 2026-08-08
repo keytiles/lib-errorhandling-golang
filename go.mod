@@ -3,7 +3,7 @@ module github.com/keytiles/lib-errorhandling-golang/v2
 go 1.26.0
 
 require (
-	github.com/keytiles/lib-logging-golang/v2 v2.1.1
+	github.com/keytiles/lib-logging-golang/v2 v2.2.0
 	github.com/keytiles/lib-sets-golang/v2 v2.0.1
 	github.com/keytiles/lib-utils-golang/v2 v2.0.0
 	github.com/stretchr/testify v1.8.4
